@@ -53,7 +53,7 @@ const COMMANDCODE_FREE = {
     sandboxMinutes: null,
   },
   subscription: { success: true, data: null },
-  whoami: { success: true, user: { id: 'u1', name: 'daigahou stuido', email: 'x@example.com', userName: 'daigahou' }, org: null },
+  whoami: { success: true, user: { id: 'u1', name: 'Acme Studio', email: 'x@example.com', userName: 'test-user' }, org: null },
 }
 
 /** A synthetic paid plan shaped exactly like the documented response. */
@@ -68,7 +68,7 @@ const COMMANDCODE_PAID = {
     },
   },
   subscription: { success: true, data: { planId: 'individual-go-v1', status: 'active', currentPeriodEnd: '2026-11-09T00:00:00.000Z' } },
-  whoami: { success: true, user: { name: 'daigahou stuido', userName: 'daigahou' } },
+  whoami: { success: true, user: { name: 'Acme Studio', userName: 'test-user' } },
 }
 
 test('toNumber / usedPercent handle strings, nulls and zero caps', () => {
@@ -135,7 +135,7 @@ test('parseCommandCode handles the live free-tier payload (no plan, no windows)'
   assert.equal(result.windows.monthly.cap, undefined)
   assert.equal(result.windows.monthly.unit, undefined)
   assert.deepEqual(result.credits, { remaining: 0, granted: null, purchased: 0 })
-  assert.equal(result.account.userName, 'daigahou')
+  assert.equal(result.account.userName, 'test-user')
 })
 
 test('parseCommandCode maps a paid plan: 5-hour, weekly and monthly credit usage', () => {

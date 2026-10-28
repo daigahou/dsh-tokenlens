@@ -434,6 +434,7 @@ function providersFixture(overrides = {}) {
       detailsExpanded: 'auto',
     },
     storeFile: 'C:/Users/x/.dsh/dsh-tokenlens/providers.json',
+    storeFileDisplay: '~/.dsh/dsh-tokenlens/providers.json',
     dshProviders: dshProvidersFixture(),
     providers: [
       providerEntry({ subscribed: true }),
@@ -2173,7 +2174,8 @@ test('the management page opens from the dialog header, loads providers and 返�
     assert.ok(text.includes('Anthropic'), 'a DSH-only route without an adapter is listed read-only')
     assert.match(text, /DSH 已配置，但插件暂时无法自动识别其用量接口/)
     assert.ok(text.includes('配置文件：'), 'the settings path is shown as a hint')
-    assert.ok(text.includes('C:/Users/x/.dsh/dsh-tokenlens/providers.json'))
+    assert.ok(text.includes('~/.dsh/dsh-tokenlens/providers.json'), 'the settings path is home-relative in the UI')
+    assert.equal(text.includes('C:/Users/x/'), false, 'the raw home path is not rendered')
     assert.equal(
       plugin.calls.filter((call) => call.payload.action === 'providers').length,
       2,

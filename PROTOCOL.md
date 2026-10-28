@@ -287,7 +287,7 @@ needs no provider catalog of its own.
 
 The dialog 「供应商管理」 page talks to three additional actions:
 
-- `{action:"providers"}` → `{ok:true, providers:[{providerId,label,shortLabel,kind,enabled,hasKey,keySource,apiKeyRef,baseURL,consoleUrl,builtin,dshManaged,dshProviderId}], dshProviders:[{providerId,label,supported,usageProviderId}], settings:{labelStyle:"short"|"full"}, storeFile}`
+- `{action:"providers"}` → `{ok:true, providers:[{providerId,label,shortLabel,kind,enabled,hasKey,keySource,apiKeyRef,baseURL,consoleUrl,builtin,dshManaged,dshProviderId}], dshProviders:[{providerId,label,supported,usageProviderId}], settings:{labelStyle:"short"|"full"}, storeFile, storeFileDisplay}`. `storeFile` is the real path (local tooling); `storeFileDisplay` replaces the user's home directory with `~` and is what the management page renders.
 - `{action:"providerUpdate", providerId, update:{enabled?,apiKey?,apiKeyRef?,baseURL?,consoleUrl?,label?,shortLabel?}}` → same list payload;
   empty strings clear a stored value (falling back to the profile/default). `label` (全名, ≤40 chars) and
   `shortLabel` (短标签, ≤12 chars) let the management page rename a provider. The shipped management page no

@@ -35,6 +35,7 @@ import {
   saveProviderStore,
 } from './lib/provider-store.mjs'
 import { makeCustomAdapter, validateCustomProvider } from './lib/custom-provider.mjs'
+import { redactEndpoint, redactPaths } from './lib/redact.mjs'
 
 /**
  * The one browser-facing route this plugin owns.
@@ -70,7 +71,7 @@ export const inject = []
 export const PLUGIN_NAME = 'dsh-tokenlens'
 
 /** Plugin version; mirrors package.json (kept here so diagnostics need no fs read). */
-export const PLUGIN_VERSION = '1.0.0'
+export const PLUGIN_VERSION = '1.0.1'
 
 /** Documented defaults; every field of the raw row config is optional. */
 const DEFAULTS = {
@@ -293,7 +294,7 @@ export function apply(ctx, rawConfig) {
       const target = config.statusFile
       const temporary = `${target}.tmp`
       await mkdir(dirname(target), { recursive: true })
-      await writeFile(temporary, JSON.stringify(statusLatest, null, 2), 'utf8')
+      await writeFile(temporary, JSON.stringify(redactPaths(statusLatest), null, 2), { encoding: 'utf8', mode: 0o600 })
       await rename(temporary, target)
     } catch (error) {
       warn(`cannot write the status file: ${String(error?.message ?? error)}`)
@@ -700,7 +701,14 @@ export function apply(ctx, rawConfig) {
       }
     })
 
-    return { ok: true, providers, dshProviders, settings: sanitizeSettings(providerStore.settings), storeFile: providerStoreFile }
+    return {
+      ok: true,
+      providers,
+      dshProviders,
+      settings: sanitizeSettings(providerStore.settings),
+      storeFile: providerStoreFile,
+      storeFileDisplay: redactPaths(providerStoreFile),
+    }
   }
 
   /** Persist one management-page edit and invalidate that provider's caches. */
@@ -819,7 +827,7 @@ export function apply(ctx, rawConfig) {
           retryable: true,
         })
       }
-      throw new UsageError('network', `cannot reach the usage endpoint (${url}): ${String(error?.message ?? error)}`, {
+      throw new UsageError('network', `cannot reach the usage endpoint (${redactEndpoint(url)}): ${String(error?.message ?? error)}`, {
         retryable: true,
       })
     }
@@ -1241,7 +1249,7 @@ export function apply(ctx, rawConfig) {
               },
       }
     }
-    return {
+    const payload = {
       plugin: PLUGIN_NAME,
       version: PLUGIN_VERSION,
       pid: process.pid,
@@ -1273,6 +1281,7 @@ export function apply(ctx, rawConfig) {
       subscribers: state.subscribers.size,
       poll: { running: state.poll.timer !== null, intervalMs: config.pollIntervalMs },
     }
+    return redactPaths(payload)
   }
 
   // ---- service -------------------------------------------------------------

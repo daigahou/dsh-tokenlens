@@ -1171,6 +1171,7 @@ window.__ModuleLoader__.load({
         // the page shows the 已配置 empty state instead of the legacy flat list.
         hasDshProviders: Array.isArray(raw.dshProviders),
         storeFile: stringOrEmpty(raw.storeFile).trim(),
+        storeFileDisplay: stringOrEmpty(raw.storeFileDisplay).trim(),
         settings: normalizePluginSettings(settings),
         labelCatalog,
       }
@@ -1654,6 +1655,7 @@ window.__ModuleLoader__.load({
         /** The management section tab (v0.29.0): 'providers' | 'settings'. */
         tab: 'providers',
         storeFile: '',
+        storeFileDisplay: '',
         error: null,
         loadedAt: 0,
         inFlight: false,
@@ -2048,6 +2050,7 @@ window.__ModuleLoader__.load({
             dshProviders: parsed !== null ? parsed.dshProviders : [],
             hasDshProviders: parsed !== null ? parsed.hasDshProviders === true : false,
             storeFile: parsed !== null ? parsed.storeFile : '',
+            storeFileDisplay: parsed !== null ? parsed.storeFileDisplay : '',
             loadedAt: Date.now(),
           })
           return { kind: 'ok' }
@@ -2128,6 +2131,7 @@ window.__ModuleLoader__.load({
               dshProviders: Array.isArray(data.dshProviders) ? parsed.dshProviders : current.dshProviders,
               hasDshProviders: Array.isArray(data.dshProviders) ? true : current.hasDshProviders === true,
               storeFile: adoptsList ? parsed.storeFile : current.storeFile,
+              storeFileDisplay: adoptsList ? parsed.storeFileDisplay : current.storeFileDisplay,
               phase: 'ready',
               error: null,
               loadedAt: Date.now(),
@@ -2191,6 +2195,7 @@ window.__ModuleLoader__.load({
                   dshProviders: Array.isArray(data.dshProviders) ? parsed.dshProviders : current.dshProviders,
                   hasDshProviders: Array.isArray(data.dshProviders) ? true : current.hasDshProviders === true,
                   storeFile: parsed.storeFile,
+                  storeFileDisplay: parsed.storeFileDisplay,
                   phase: 'ready',
                   error: null,
                   loadedAt: Date.now(),
@@ -5494,7 +5499,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { key: 'store-file', className: 'dsh-tokenlens-provider-store-file' },
-            t('providersStoreFile', { file: management.storeFile }),
+            t('providersStoreFile', { file: management.storeFileDisplay !== '' ? management.storeFileDisplay : management.storeFile }),
           ),
         )
       }
@@ -5849,7 +5854,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { key: 'store-file', className: 'dsh-tokenlens-provider-store-file' },
-            t('providersStoreFile', { file: management.storeFile }),
+            t('providersStoreFile', { file: management.storeFileDisplay !== '' ? management.storeFileDisplay : management.storeFile }),
           ),
         )
       }
@@ -6429,7 +6434,17 @@ window.__ModuleLoader__.load({
       let stopped = false
       let observer = null
       let debounceTimer = null
-      const statsTick = typeof setInterval === 'function' ? setInterval(() => refreshWorkspaceTokens(), 5000) : null
+      const statsTick = typeof setInterval === 'function'
+        ? setInterval(() => {
+            try {
+              if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+              refreshWorkspaceTokens()
+              refreshWorkspaceHoverCards()
+            } catch {
+              /* decorative only */
+            }
+          }, 5000)
+        : null
       // Hover cards can open before the first stats response lands; the 5s
       // tick created above decorates them once the store has data.
       let disposeStore = null

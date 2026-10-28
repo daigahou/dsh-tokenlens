@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { zstdCompressSync } from 'node:zlib'
 import { apply, BRIDGE, normalize, TOOL_ACTIONS } from '../index.js'
+import { redactPath } from '../lib/redact.mjs'
 import {
   asCacheHit,
   asStaleCache,
@@ -468,6 +469,29 @@ test('upstream failures are classified and keep the previous snapshot as stale',
   const parse = await bridge(captured, { action: 'refresh' })
   assert.equal(parse.body.error.code, 'parse')
   assert.equal(calls.length, 3)
+})
+
+test('network error messages redact endpoint credentials and query tokens', async (t) => {
+  const { captured } = harness(t, {
+    credentials: okCredentials,
+    config: {
+      minRefreshIntervalMs: 0,
+      pollIntervalMs: 0,
+      providers: {
+        'opencode-go': { baseURL: 'https://user:pass@example.com/usage?api_key=sk-secret' },
+      },
+    },
+  })
+  stubFetch(t, () => {
+    throw new Error('socket failure')
+  })
+
+  const result = await bridge(captured, { action: 'refresh' })
+  assert.equal(result.body.ok, false)
+  assert.equal(result.body.error.code, 'network')
+  assert.equal(result.body.error.message.includes('sk-secret'), false, 'query tokens stay out of error messages')
+  assert.equal(result.body.error.message.includes('user:pass'), false, 'URL credentials stay out of error messages')
+  assert.match(result.body.error.message, /https:\/\/example\.com\/usage/, 'the endpoint itself stays useful for debugging')
 })
 
 test('custom usage adapters save, resolve and delete through the management bridge', async (t) => {
@@ -935,6 +959,7 @@ test('the provider management actions list, edit and test providers', async (t) 
   const list = await bridge(captured, { action: 'providers' })
   assert.equal(list.body.ok, true)
   assert.equal(list.body.storeFile, storeFile)
+  assert.equal(list.body.storeFileDisplay, redactPath(storeFile), 'display path redacts the home directory')
   const managed = list.body.providers.find((provider) => provider.providerId === 'opencode-go')
   assert.equal(managed.label, 'OpenCode', 'the built-in display label is preserved')
   assert.equal(managed.dshManaged, true, 'opencode-go is configured in DSH model settings')

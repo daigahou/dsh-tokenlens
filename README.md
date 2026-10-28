@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.0，首个公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.1，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -77,7 +77,7 @@
 │  ZCode              —        / 约 12.0M / 约 118.0M / 约 1.20B             │
 │                                                                            │
 │  ── DSH 按供应商 / DSH Top 模型 / 未映射 … ───────────────────────────────   │
-│  [刷新]                       [打开 Command Code 用量页]            v1.0.0  │
+│  [刷新]                       [打开 Command Code 用量页]            v1.0.1  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -367,7 +367,7 @@ Host 半注册 `tokenlens_usage`，参数 `action`（默认 `snapshot`）与可�
 ```powershell
 git clone https://github.com/daigahou/dsh-tokenlens.git
 cd dsh-tokenlens
-node --test        # 223 个用例
+node --test        # 227 个用例
 ```
 
 本地联调安装方式见[方式 B](#方式-b本地开发从源码-link)。

@@ -5,6 +5,10 @@
 用 `scripts/bump-version.mjs <version> "<说明>"` 一次完成 `package.json` + `index.js`
 （`PLUGIN_VERSION`）+ 本文件的同步更新。
 
+## 1.0.1 — 2026-10-28
+
+- fix(privacy): 状态文件/诊断/管理页路径脱敏（~）、状态文件 0600、网络错误 URL 去凭据/查询串；匿名化测试 fixture 与公共文档中的个人邮箱；工作区统计 tick 增加隐藏页保护；新增 redact 单测与网络错误回归测试
+
 ## 1.0.0 — 2026-10-28
 
 - 首个公开版本：包名与内部标识统一为 dsh-tokenlens / tokenlens、开源配套文件、MIT 许可

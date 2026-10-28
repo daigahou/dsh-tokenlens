@@ -13,6 +13,8 @@ node_modules/
 releases/
 *.tgz
 *.tar.gz
+*.zip
+*.7z
 coverage/
 
 # ── Logs and scratch files ────────────────────────────────────────────────────
