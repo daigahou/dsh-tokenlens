@@ -343,7 +343,7 @@ Host 半注册 `tokenlens_usage`，参数 `action`（默认 `snapshot`）与可�
 
 ## 验证
 
-- `node --test`：**223 个自动化用例**，覆盖 Host 数据层、供应商适配器、统计折叠、各 harness 读取、插件集成与浏览器端渲染 / 交互。
+- `node --test`：**231 个自动化用例**，覆盖 Host 数据层、供应商适配器、统计折叠、各 harness 读取、插件集成与浏览器端渲染 / 交互。
 - 在真实环境中验证过 **5 个 harness** 的数据源；本机统计与独立的 SQLite 查询、独立的日志解析逐项对账（差额为 0），跨 harness 合并与供应商映射算术自洽。
 - 供应商接口按各官方文档与参考客户端行为验证；未配置凭据时 chip 静默隐藏，接口异常时按可重试错误降级。
 
@@ -354,7 +354,7 @@ Host 半注册 `tokenlens_usage`，参数 `action`（默认 `snapshot`）与可�
 ```powershell
 git clone https://github.com/daigahou/dsh-tokenlens.git
 cd dsh-tokenlens
-node --test        # 227 个用例
+node --test        # 231 个用例
 ```
 
 本地联调安装方式见[方式 B](#方式-b本地开发从源码-link)。

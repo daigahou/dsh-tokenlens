@@ -9,7 +9,7 @@
 
 > One glance at your usage: plan capacity for the selected provider plus local token statistics across harnesses, right below the DSH composer.
 
-**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.0.0 (first public release). It keeps two kinds of numbers separate:
+**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.0.2. It keeps two kinds of numbers separate:
 
 - **Plan capacity** — the provider's authoritative server-side values (percentage windows, used / cap, balance or remaining credit);
 - **Local token stats** — tokens consumed on this machine across every connected harness, for the selected provider or for all providers combined.
@@ -109,7 +109,7 @@ Host bridge route: `/api/tokenlens`; agent tool: `tokenlens_usage`.
 
 ## Development
 
-Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 227 tests.
+Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 231 tests.
 
 Release: `node scripts/bump-version.mjs <version> "<note>"` updates `package.json`, `PLUGIN_VERSION` and `CHANGELOG.md`; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
