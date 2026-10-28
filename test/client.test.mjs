@@ -1418,9 +1418,8 @@ test('the footer console link follows the selected provider', async () => {
   }
 })
 
-test('the console link falls back when links are missing or junk', async () => {
-  // Old payload / v2 Host: no `links` at all → legacy opencode console URL,
-  // while the label still follows the provider.
+test('the console link is hidden when links are missing or junk', async () => {
+  // Old payload / v2 Host: no `links` at all → no unrelated fallback link.
   {
     const plugin = loadPlugin((payload) => {
       if (payload.action === 'hello') return { ok: true }
@@ -1431,9 +1430,7 @@ test('the console link falls back when links are missing or junk', async () => {
     })
     try {
       const tree = await settleDialog(plugin, 'opencode-go')
-      const link = consoleLinkOf(tree)
-      assert.equal(link.props.href, 'https://opencode.ai/console')
-      assert.match(textOf(link), /打开 OpenCode 控制台/)
+      assert.equal(consoleLinkOf(tree), undefined, 'no console link without a wire links.console')
     } finally {
       plugin.dispose()
     }
@@ -1447,9 +1444,7 @@ test('the console link falls back when links are missing or junk', async () => {
     })
     try {
       const tree = await settleDialog(plugin, 'deepseek')
-      const link = consoleLinkOf(tree)
-      assert.equal(link.props.href, 'https://opencode.ai/console', `junk ${JSON.stringify(junk)} falls back`)
-      assert.match(textOf(link), /打开 DeepSeek 平台/)
+      assert.equal(consoleLinkOf(tree), undefined, `junk ${JSON.stringify(junk)} produces no link`)
     } finally {
       plugin.dispose()
     }

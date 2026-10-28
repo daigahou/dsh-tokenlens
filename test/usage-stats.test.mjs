@@ -673,3 +673,37 @@ test('fiveHours keeps only the rolling five-hour local usage window', async (t) 
   assert.equal(provider.fiveHours.messages, 1)
   assert.equal(provider.last7Days.total, 100, 'the older event still counts in the 7-day window')
 })
+
+test('malicious provider ids cannot pollute Object.prototype', () => {
+  const before = Object.prototype.input
+  foldSession([
+    sessionHeader(),
+    headerEvent(1, '__proto__', 'model-x'),
+    usageEvent(2, Date.now(), { inputTokens: 10, outputTokens: 5, totalTokens: 15 }),
+  ])
+  assert.equal(Object.prototype.input, before, 'Object.prototype is untouched')
+  assert.equal(Object.prototype.hasOwnProperty('input'), before !== undefined)
+})
+
+test('effective day is computed from the full history, not only the last 30 days', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-old-history-'))
+  t.after(() => rm(dshHome, { recursive: true, force: true }))
+  const old = Date.now() - 60 * 24 * 3600 * 1000
+  const recent = Date.now() - 3600 * 1000
+  await writeSession(dshHome, 'session-old', [
+    sessionHeader(),
+    headerEvent(1, 'opencode-go', 'deepseek-v4.1-flash'),
+    usageEvent(2, old, { inputTokens: 10, outputTokens: 0, totalTokens: 10 }),
+    usageEvent(3, recent, { inputTokens: 20, outputTokens: 0, totalTokens: 20 }),
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: { stats: { ttlMs: 0, harnesses: { dsh: true, zcode: false, opencode: false, workbuddy: false, qoder: false } } },
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  const provider = result.providers.find((row) => row.providerId === 'opencode-go')
+  assert.ok(provider)
+  assert.equal(provider.effectiveDay, dayKey(old), 'first record can be older than 30 days')
+  assert.ok(provider.effectiveDays >= 60, `effectiveDays should cover the full history (got ${provider.effectiveDays})`)
+})

@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.1，公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.2，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -19,7 +19,7 @@
 ## 目录
 
 - [功能概览](#功能概览)
-- [效果预览](#效果预览)
+- [效果截图](#效果截图)
 - [安装](#安装)
 - [凭据](#凭据)
 - [配置参考](#配置参考)
@@ -47,46 +47,33 @@
 
 支持 5 个 Harness：**DSH、ZCode、OpenCode CLI、WorkBuddy / CodeBuddy CLI、Qoder CN CLI**；内置 25 家供应商元数据，其中 15 家带套餐 / 余额适配器。
 
-## 效果预览
+## 效果截图
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │ 输入…                                                                  │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│   ● OpenCode   5时 12%  ·  周 34%  ·  月 61%   ← 套餐容量（服务端权威）      │
-│   ● DeepSeek   ¥ 12.34                                                       │
-└──────────────────────────────────────────────────────────────────────────────┘
-                         ↓ 点击 chip
-┌────────────────────────────────────────────────────────────────────────────┐
-│  dsh-TokenLens · 词元透镜 · Command Code                           [✕]     │
-│  数据来自供应商接口（服务端权威）                                           │
-│  5小时 — · 本周 — · 月度剩余额度 $0.00 · 免费档窗口显示 —                  │
-│                                                                            │
-│  ── 本机 Token 用量（跨 Harness）────────────────────────────────────────   │
-│  [当前供应商 · 全部 Harness] [全部 Harness]        [数据 / 图表] [管理 ⚙] │
-│  当前供应商：Command Code                                                  │
-│  今日              最近7天            最近X天            总计              │
-│  约 12.3M          约 45.6M           约 123.4M          约 1.23B          │
-│  输入 … 输出 …      输入 … 输出 …       输入 … 输出 …       输入 … 输出 …     │
-│  缓存读 …          缓存读 …            缓存读 …            缓存读 …         │
-│  共 N 次请求        共 N 次请求         共 N 次请求         共 N 次请求     │
-│                                                                            │
-│  按 Harness（当前供应商）                    今日 / 7天 / X天 / 总计         │
-│  DSH                约 12.3M / 45.6M / 123.4M / 1.10B                      │
-│  ZCode              —        / 约 12.0M / 约 118.0M / 约 1.20B             │
-│                                                                            │
-│  ── DSH 按供应商 / DSH Top 模型 / 未映射 … ───────────────────────────────   │
-│  [刷新]                       [打开 Command Code 用量页]            v1.0.1  │
-└────────────────────────────────────────────────────────────────────────────┘
-```
+> 截图取自作者本机（DSH Desktop，深色主题），数值为真实统计结果；实际显示随所选供应商、窗口与主题变化。
 
-> 上图为界面示意，数值为占位符；实际内容跟随当前供应商、窗口与主题变化。
+### 输入框下方的用量 chip
 
-<!-- 截图占位（发布前补充真实截图）：
-     1) docs/images/chip.png   —— 输入框下方的用量 chip
-     2) docs/images/dialog.png —— 详情弹窗（套餐容量 + 本机 Token 统计）
-     截图就绪后，把上面两个文件路径替换为对应的图片引用即可。 -->
+![输入框下方的用量 chip](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/composer-chip.png)
+
+### 工作区 Token 徽标与悬浮统计
+
+![工作区 Token 徽标与悬浮统计](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/workspace-badge-hover.png)
+
+### 用量详情弹窗
+
+| 图表模式 | 数据模式 |
+|:---:|:---:|
+| ![统计弹窗 · 图表模式](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/stats-chart.png) | ![统计弹窗 · 数据模式](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/stats-data.png) |
+
+### 供应商管理页
+
+| 供应商配置 | 插件设置 |
+|:---:|:---:|
+| ![供应商配置](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-providers.png) | ![插件设置](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-plugin.png) |
+
+### 内置供应商池
+
+![内置供应商池](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-builtin.png)
 
 ## 安装
 

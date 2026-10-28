@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { redactEndpoint, redactPath, redactPaths } from '../lib/redact.mjs'
+import { redactEndpoint, redactPath, redactPaths, redactTextPaths } from '../lib/redact.mjs'
 
 test('redactPath replaces only the current home prefix', () => {
   const home = homedir()
@@ -37,4 +37,14 @@ test('redactEndpoint strips credentials, query and fragment', () => {
   )
   assert.equal(redactEndpoint('https://example.com/v1/usage?token=abc'), 'https://example.com/v1/usage')
   assert.equal(redactEndpoint('not a url?token=abc'), 'not a url')
+})
+
+test('redactTextPaths removes absolute paths from free-form errors', () => {
+  assert.equal(
+    redactTextPaths('ENOENT: no such file, open C:\\Users\\alice\\.zcode\\db.sqlite'),
+    'ENOENT: no such file, open [path]',
+  )
+  assert.equal(redactTextPaths('cannot read /home/alice/.cache/x'), 'cannot read [path]')
+  assert.equal(redactTextPaths('dsh-app://app'), 'dsh-app://app', 'URL schemes are not path-like')
+  assert.equal(redactTextPaths('disk F:\\AI\\project'), 'disk [path]')
 })

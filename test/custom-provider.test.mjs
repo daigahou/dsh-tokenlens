@@ -32,6 +32,21 @@ test('validateCustomProvider normalizes ids/labels/currency and rejects bad defi
   assert.equal(def.currency, 'USD')
   assert.throws(() => validateCustomProvider({ ...balanceDef, providerId: 'Bad Id' }), (error) => error.code === 'parse')
   assert.throws(() => validateCustomProvider({ ...balanceDef, baseURL: 'ftp://x' }), (error) => error.code === 'parse')
+  assert.throws(
+    () => validateCustomProvider({ ...balanceDef, baseURL: 'http://api.example.com' }),
+    (error) => error.code === 'parse',
+    'plain http to a remote host would leak the bearer key',
+  )
+  assert.throws(
+    () => validateCustomProvider({ ...balanceDef, baseURL: 'https://user:pass@api.example.com' }),
+    (error) => error.code === 'parse',
+    'credentials in the URL are rejected',
+  )
+  assert.equal(
+    validateCustomProvider({ ...balanceDef, baseURL: 'http://127.0.0.1:8080/' }).baseURL,
+    'http://127.0.0.1:8080',
+    'loopback development endpoints may use http',
+  )
   assert.throws(() => validateCustomProvider({ ...balanceDef, amountPath: '' }), (error) => error.code === 'parse')
   assert.equal(sanitizeCustomProvider({ ...balanceDef, kind: 'nope' }), null)
 })

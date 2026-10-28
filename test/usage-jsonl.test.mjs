@@ -84,6 +84,31 @@ test('readWorkbuddyUsage normalizes rawUsage, dedupes and skips zero rows', asyn
   assert.equal(today.modelId, 'deepseek-v4.1-flash')
 })
 
+test('WorkBuddy records without any request/message id are not collapsed', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'tokenlens-workbuddy-no-id-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeTranscript(dir, 's-no-id', [
+    {
+      timestamp: at('2026-10-25', 10),
+      providerData: {
+        model: 'deepseek-v4.1-flash',
+        rawUsage: { prompt_tokens: 100, completion_tokens: 1, total_tokens: 101, prompt_cache_hit_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    },
+    {
+      timestamp: at('2026-10-25', 11),
+      providerData: {
+        model: 'deepseek-v4.1-flash',
+        rawUsage: { prompt_tokens: 300, completion_tokens: 1, total_tokens: 301, prompt_cache_hit_tokens: 0, cache_creation_input_tokens: 0 },
+      },
+    },
+  ])
+  const result = readWorkbuddyUsage({ root: dir })
+  assert.equal(result.requests, 2, 'both valid records are counted')
+  assert.equal(result.groups.length, 1)
+  assert.equal(result.groups[0].bucket.total, 402, '101 + 301 tokens')
+})
+
 test('readQoderUsage reads assistant usage, dedupes by message id and maps provider base URLs', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'tokenlens-qoder-'))
   t.after(() => rm(dir, { recursive: true, force: true }))

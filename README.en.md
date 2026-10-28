@@ -25,6 +25,34 @@ Everything is computed locally: zero runtime dependencies, no external database,
 - **Auto-discovery and agent tool** — providers configured in DSH Settings → Model Services are detected by route id or base-URL host and reuse their DSH credentials; `tokenlens_usage` lets the model query snapshots, local stats and diagnostics.
 - **Local-only** — 5 harnesses (DSH, ZCode, OpenCode CLI, WorkBuddy / CodeBuddy CLI, Qoder CN CLI), 25 built-in providers (15 with plan / balance adapters), read-only local data, no telemetry.
 
+## Screenshots
+
+> Captured on the author's machine (DSH Desktop, dark theme) with real statistics; the layout follows the selected provider, window and theme.
+
+**Usage chip below the composer**
+
+![Usage chip below the composer](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/composer-chip.png)
+
+**Workspace token badge and hover card**
+
+![Workspace token badge and hover card](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/workspace-badge-hover.png)
+
+**Usage dialog**
+
+| Chart mode | Data mode |
+|:---:|:---:|
+| ![Chart mode](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/stats-chart.png) | ![Data mode](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/stats-data.png) |
+
+**Provider management page**
+
+| Provider settings | Plugin settings |
+|:---:|:---:|
+| ![Provider settings](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-providers.png) | ![Plugin settings](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-plugin.png) |
+
+**Built-in provider pool**
+
+![Built-in provider pool](https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/docs/images/settings-builtin.png)
+
 ## Install
 
 Prerequisites: DSH Desktop (bundles Node.js 24), an existing DSH profile, and `$DSH_HOME` (default `~/.dsh`).

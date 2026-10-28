@@ -111,7 +111,7 @@ window.__ModuleLoader__.load({
       minimax: 'MM',
     }
     /** Picker ids the Host's adapter canonicalizes (snapshot.provider.id is canonical). */
-    const PROVIDER_ID_ALIASES = { 'deepseek-official': 'deepseek' }
+    const PROVIDER_ID_ALIASES = { 'deepseek-official': 'deepseek', opencode: 'opencode-go' }
     /** Nicer names for known local harnesses (wire labels win; raw ids fall back). */
     const HARNESS_LABELS = {
       dsh: 'DSH',
@@ -1499,10 +1499,10 @@ window.__ModuleLoader__.load({
       return state?.labelStyle === 'full' ? labels.full : labels.short
     }
 
-    /** The provider's console/usage URL: wire `links.console`, else the legacy fallback. */
+    /** The provider's console/usage URL from the wire snapshot, or '' when unknown. */
     function consoleUrlFor(snapshot) {
       const url = snapshot?.links?.console
-      return typeof url === 'string' && url !== '' ? url : LEGACY_CONSOLE_URL
+      return typeof url === 'string' && url !== '' ? url : ''
     }
 
     /** The provider-aware label of the footer console link. */
@@ -2716,6 +2716,7 @@ window.__ModuleLoader__.load({
 .dsh-tokenlens-modal-close{border:0;background:0 0;color:var(--dsw-alias-label-tertiary,#aaa);font-size:20px;line-height:1;padding:0 4px;cursor:pointer;border-radius:6px}
 .dsh-tokenlens-modal-close:hover{color:var(--dsw-alias-label-primary,#fff);background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16))}
 .dsh-tokenlens-modal-body{padding:10px 12px;min-height:0;flex:1 1 auto;overflow:hidden}
+.dsh-tokenlens-dialog-manage{max-height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .dsh-tokenlens-modal-foot{align-items:center;gap:8px;flex-wrap:wrap;display:flex;justify-content:flex-end;padding:8px 12px;border-top:1px solid var(--dsw-alias-border-subtle,rgba(127,127,127,.2));flex:none}
 @media (max-width:680px){.dsh-tokenlens-overlay{padding:8px}.dsh-tokenlens-modal{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}.dsh-tokenlens-modal-body{padding:8px 10px}.dsh-tokenlens-modal-foot{padding:8px 10px}}
 @media (max-height:720px){.dsh-tokenlens-modal-head{padding:6px 10px}.dsh-tokenlens-modal-body{padding:7px 10px}.dsh-tokenlens-modal-foot{padding:6px 10px}.dsh-tokenlens-modal-title{font-size:14px}}
@@ -3053,15 +3054,16 @@ window.__ModuleLoader__.load({
 
     /** The provider selected in this session, from the slot's `useProjection` prop. */
     function useSelectedProvider(props) {
+      const useProjection = props?.useProjection
+      if (typeof useProjection !== 'function') return null
+      // Call the slot hook outside try/catch: swallowing a hook throw would
+      // change the hook order on the next render (React error 310).
+      const model = useProjection('modelSelection')
       try {
-        const useProjection = props?.useProjection
-        if (typeof useProjection !== 'function') return null
-        const model = useProjection('modelSelection')
         const selection = model?.next ?? model?.lastUsed
         const provider = selection?.provider
         return typeof provider === 'string' && provider !== '' ? provider : null
       } catch {
-        // Defensive: an unavailable projection must only cost the provider pick.
         return null
       }
     }
@@ -5940,27 +5942,29 @@ window.__ModuleLoader__.load({
       }
 
       const busy = state.inFlight === true || state.statsInFlight === true
-      // The footer link follows the selected provider (Host `links.console`),
-      // with the provider-aware label; old payloads fall back to the legacy URL.
+      // The footer link follows the selected provider from the wire snapshot; when
+      // no snapshot/link exists we hide it instead of linking to an unrelated console.
       const consoleUrl = consoleUrlFor(snapshot)
       const consoleLabel = consoleLabelFor(snapshot, state.providerId, t)
       const footer = h(
         React.Fragment,
         null,
-        h(
-          'a',
-          {
-            className: 'dsh-tokenlens-console',
-            href: consoleUrl,
-            target: '_blank',
-            rel: 'noreferrer noopener',
-            'aria-label': consoleLabel,
-            title: consoleUrl,
-            onClick: (event) => openConsole(consoleUrl, event),
-          },
-          Icon('external', 12),
-          consoleLabel,
-        ),
+        consoleUrl === ''
+          ? null
+          : h(
+              'a',
+              {
+                className: 'dsh-tokenlens-console',
+                href: consoleUrl,
+                target: '_blank',
+                rel: 'noreferrer noopener',
+                'aria-label': consoleLabel,
+                title: consoleUrl,
+                onClick: (event) => openConsole(consoleUrl, event),
+              },
+              Icon('external', 12),
+              consoleLabel,
+            ),
         h(
           Button,
           {
@@ -6174,7 +6178,7 @@ window.__ModuleLoader__.load({
           value.className = 'dsh-tokenlens-workspace-tokens-value'
           badge.appendChild(value)
         }
-        value.textContent = text
+        if (value.textContent !== text) value.textContent = text
       } catch {
         /* decorative only */
       }
@@ -6379,6 +6383,26 @@ window.__ModuleLoader__.load({
             if (line === null) continue
             const doc = card.ownerDocument ?? (typeof document !== 'undefined' ? document : null)
             if (doc === null || typeof doc.createElement !== 'function') continue
+            const buckets = [
+              ['statsToday', workspaceBucketTotal(entry.today)],
+              ['statsLast7Days', workspaceBucketTotal(entry.last7Days)],
+              ['statsLast30Days', workspaceBucketTotal(entry.last30Days)],
+              ['statsAllTime', Number.isFinite(entry.total) ? entry.total : 0],
+            ]
+            const marker = String(entry.workspaceId ?? entry.label ?? pathText)
+            // Rebuilding the same content would trigger the body MutationObserver
+            // again; only rewrite when labels/numbers/locale actually changed.
+            const signature = `${appLocale}|${buckets.map(([key, value]) => `${key}:${value}`).join('|')}`
+            const unchanged =
+              typeof line.getAttribute === 'function' &&
+              line.getAttribute('data-tokenlens-workspace-hover-signature') === signature &&
+              line.firstChild !== null &&
+              line.firstChild !== undefined
+            if (unchanged) {
+              line.setAttribute('data-tokenlens-workspace-hover', marker)
+              if (typeof card.setAttribute === 'function') card.setAttribute('data-tokenlens-workspace-hover', marker)
+              continue
+            }
             // Rebuild the children so labels follow the active locale and the
             // numbers update in place (no duplicate blocks on re-render).
             if (typeof line.removeChild === 'function') {
@@ -6386,12 +6410,6 @@ window.__ModuleLoader__.load({
                 line.removeChild(line.firstChild)
               }
             }
-            const buckets = [
-              ['statsToday', workspaceBucketTotal(entry.today)],
-              ['statsLast7Days', workspaceBucketTotal(entry.last7Days)],
-              ['statsLast30Days', workspaceBucketTotal(entry.last30Days)],
-              ['statsAllTime', Number.isFinite(entry.total) ? entry.total : 0],
-            ]
             for (const [i18nKey, value] of buckets) {
               const item = doc.createElement('span')
               item.className = 'dsh-tokenlens-workspace-hover-token'
@@ -6405,8 +6423,8 @@ window.__ModuleLoader__.load({
               item.appendChild(amount)
               line.appendChild(item)
             }
-            const marker = String(entry.workspaceId ?? entry.label ?? pathText)
             line.setAttribute('data-tokenlens-workspace-hover', marker)
+            line.setAttribute('data-tokenlens-workspace-hover-signature', signature)
             if (typeof card.setAttribute === 'function') card.setAttribute('data-tokenlens-workspace-hover', marker)
           } catch {
             /* one odd hover card must not stop the others */
@@ -6462,7 +6480,24 @@ window.__ModuleLoader__.load({
         }
       }
       try {
-        observer = new MutationObserver(() => debouncedRefresh())
+        observer = new MutationObserver((mutations) => {
+          try {
+            // Our own badge/hover writes also produce childList mutations; reacting
+            // to them would feed the observer forever (~6 Hz). Ignore mutations
+            // whose target is inside one of our decorated containers.
+            const ownTarget = (target) => {
+              if (target === null || target === undefined || typeof target.closest !== 'function') return false
+              return (
+                target.closest(`.${WORKSPACE_BADGE_CLASS}`) !== null ||
+                target.closest('.dsh-tokenlens-workspace-hover-tokens') !== null
+              )
+            }
+            if (mutations.length > 0 && mutations.every((mutation) => ownTarget(mutation.target))) return
+          } catch {
+            /* fall through to the debounced refresh */
+          }
+          debouncedRefresh()
+        })
         observer.observe(document.body, { childList: true, subtree: true })
       } catch {
         observer = null

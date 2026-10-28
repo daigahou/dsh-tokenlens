@@ -20,7 +20,7 @@ cd dsh-tokenlens
 node --test
 ```
 
-`node --test` 会自动发现 `test/*.test.mjs`，当前 **223 个用例**、约 13 秒跑完，**不需要联网**。全部通过即环境就绪。
+`node --test` 会自动发现 `test/*.test.mjs`，当前 **231 个用例**、约 13 秒跑完，**不需要联网**。全部通过即环境就绪。
 
 > 想在 DSH 里实际试用插件，见 [README](README.md) 的「安装」章节：开发者可以直接用本地路径安装，不需要先发布到 npm。
 

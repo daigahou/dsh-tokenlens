@@ -127,6 +127,16 @@ without a wire change), and a harness's own provider ids are mapped onto the
 canonical DSH provider ids so that, e.g., ZCode usage on `opencode-go-chat`
 counts toward the `opencode-go` provider selected in DSH.
 
+v3 additionally carries the rolling **最近 7 天** window (`last7Days`), the
+provider effective-date fallback (`effectiveDay`, `effectiveDays`,
+`sinceEffective`), per-workspace totals (`workspaces[]`: `workspaceId`, `label`,
+`total`, `messages`, `today`/`last7Days`/`last30Days`; local `cwd`/`path` are
+Host-only and never sent on the wire), the rolling 5-hour local window
+(`fiveHours`, DSH-only because external harnesses are day-granular), and the
+bounded `daily[]` series used by the chart view. Absolute local paths are
+stripped from the wire; free-form error messages have path substrings replaced
+with `[path]`.
+
 ```jsonc
 {
   "ok": true,

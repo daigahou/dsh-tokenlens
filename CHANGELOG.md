@@ -5,6 +5,10 @@
 用 `scripts/bump-version.mjs <version> "<说明>"` 一次完成 `package.json` + `index.js`
 （`PLUGIN_VERSION`）+ 本文件的同步更新。
 
+## 1.0.2 — 2026-10-28
+
+- fix(security+privacy): audit hardening — OpenCode auth key scoping, workspace badge observer loop, canonical provider cache keys, stats path redaction incl. free-form errors, baseURL HTTPS validation (profile/custom), effective-day full history, prototype-pollution-safe maps, WorkBuddy no-id dedupe, immutable provider store writes, secure temp files, DST-safe windows, console link/provider aliases, management scroll; screenshots sanitized
+
 ## 1.0.1 — 2026-10-28
 
 - fix(privacy): 状态文件/诊断/管理页路径脱敏（~）、状态文件 0600、网络错误 URL 去凭据/查询串；匿名化测试 fixture 与公共文档中的个人邮箱；工作区统计 tick 增加隐藏页保护；新增 redact 单测与网络错误回归测试

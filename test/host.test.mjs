@@ -181,6 +181,8 @@ test('parseCredentialRefs reads only the refs mapping', () => {
   assert.equal(refs.OTHER, 'quoted value')
   assert.equal(refs.COMMENTED, 'value')
   assert.equal(refs.NOT_A_REF, undefined)
+  const commented = parseCredentialRefs('refs: # credentials\n  DEEPSEEK_API_KEY: sk-xyz')
+  assert.equal(commented.DEEPSEEK_API_KEY, 'sk-xyz', 'a comment after refs: keeps the mapping active')
 })
 
 test('parseCredentialRefs survives malformed / empty documents', () => {
@@ -198,6 +200,12 @@ test('parseOpencodeAuth prefers the opencode provider entries', () => {
   assert.equal(parseOpencodeAuth(doc), 'oc_sk_go')
   assert.equal(parseOpencodeAuth('{"opencode":{"type":"api","key":"oc_sk_x"}}'), 'oc_sk_x')
   assert.equal(parseOpencodeAuth('{"other":{"type":"api","key":"oc_sk_fallback"}}'), 'oc_sk_fallback')
+  assert.equal(
+    parseOpencodeAuth('{"anthropic":{"type":"api","key":"sk-ant-secret"}}'),
+    undefined,
+    'a foreign provider key must not be sent to the OpenCode endpoint',
+  )
+  assert.equal(parseOpencodeAuth('{"openai":{"type":"api","key":"sk-openai-secret"}}'), undefined)
   assert.equal(parseOpencodeAuth('{"oauth":{"type":"oauth","access":"a"}}'), undefined)
   assert.equal(parseOpencodeAuth('not json'), undefined)
   assert.equal(parseOpencodeAuth('[]'), undefined)
@@ -471,7 +479,7 @@ test('upstream failures are classified and keep the previous snapshot as stale',
   assert.equal(calls.length, 3)
 })
 
-test('network error messages redact endpoint credentials and query tokens', async (t) => {
+test('an unsafe profile baseURL is rejected before any credential is sent', async (t) => {
   const { captured } = harness(t, {
     credentials: okCredentials,
     config: {
@@ -482,16 +490,14 @@ test('network error messages redact endpoint credentials and query tokens', asyn
       },
     },
   })
-  stubFetch(t, () => {
-    throw new Error('socket failure')
-  })
+  const calls = stubFetch(t, () => jsonResponse(LIVE_PAYLOAD))
 
   const result = await bridge(captured, { action: 'refresh' })
   assert.equal(result.body.ok, false)
-  assert.equal(result.body.error.code, 'network')
-  assert.equal(result.body.error.message.includes('sk-secret'), false, 'query tokens stay out of error messages')
-  assert.equal(result.body.error.message.includes('user:pass'), false, 'URL credentials stay out of error messages')
-  assert.match(result.body.error.message, /https:\/\/example\.com\/usage/, 'the endpoint itself stays useful for debugging')
+  assert.equal(result.body.error.code, 'parse')
+  assert.equal(calls.length, 0, 'no request is made to an unsafe baseURL')
+  assert.equal(result.body.error.message.includes('sk-secret'), false)
+  assert.equal(result.body.error.message.includes('user:pass'), false)
 })
 
 test('custom usage adapters save, resolve and delete through the management bridge', async (t) => {
@@ -733,6 +739,11 @@ test('the picker route ids "opencode" and "opencode-go" share the OpenCode adapt
     assert.equal(result.body.snapshot.provider.id, 'opencode-go', 'canonical adapter id')
     assert.equal(result.body.snapshot.provider.label, 'OpenCode')
   }
+  // Both alias and canonical id must share one cache slot; an alias refresh must
+  // not leave a second, subscription-detection-invisible entry behind.
+  const diagnostics = await bridge(captured, { action: 'diagnostics' })
+  assert.ok(diagnostics.body.diagnostics.providers['opencode-go'].cache, 'canonical id owns the cache')
+  assert.equal(diagnostics.body.diagnostics.providers.opencode, undefined, 'no alias-keyed provider row/cache')
 })
 
 test('normalize applies documented defaults and coerces raw values', () => {
@@ -958,7 +969,8 @@ test('the provider management actions list, edit and test providers', async (t) 
 
   const list = await bridge(captured, { action: 'providers' })
   assert.equal(list.body.ok, true)
-  assert.equal(list.body.storeFile, storeFile)
+  assert.equal(list.body.storeFile, redactPath(storeFile), 'the raw absolute path is never returned')
+  assert.equal(list.body.storeFileDisplay, redactPath(storeFile), 'display path redacts the home directory')
   assert.equal(list.body.storeFileDisplay, redactPath(storeFile), 'display path redacts the home directory')
   const managed = list.body.providers.find((provider) => provider.providerId === 'opencode-go')
   assert.equal(managed.label, 'OpenCode', 'the built-in display label is preserved')
@@ -1000,6 +1012,23 @@ test('the provider management actions list, edit and test providers', async (t) 
   assert.equal(updated.body.providers.find((provider) => provider.providerId === 'openrouter').hasKey, true)
   const store = JSON.parse(await readFile(storeFile, 'utf8'))
   assert.equal(store.providers.openrouter.apiKey, 'sk-or-test')
+
+  const insecure = await bridge(captured, {
+    action: 'providerUpdate',
+    providerId: 'openrouter',
+    update: { baseURL: 'http://api.example.com' },
+  })
+  assert.equal(insecure.body.ok, false)
+  assert.equal(insecure.body.error.code, 'parse', 'plain http baseURL is rejected (key would be sent in clear)')
+  assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).providers.openrouter.baseURL, undefined)
+
+  const secure = await bridge(captured, {
+    action: 'providerUpdate',
+    providerId: 'openrouter',
+    update: { baseURL: 'https://api.example.com/' },
+  })
+  assert.equal(secure.body.ok, true)
+  assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).providers.openrouter.baseURL, 'https://api.example.com')
 
   const tested = await bridge(captured, { action: 'providerTest', providerId: 'openrouter' })
   assert.equal(tested.body.ok, true)
@@ -1082,6 +1111,10 @@ test('the stats action serves today/all-time token totals from session logs', as
   assert.equal(stats.allTime.messages, 1)
   assert.equal(stats.providers[0].providerId, 'opencode-go')
   assert.equal(stats.providers[0].label, 'OpenCode')
+  // Local absolute paths are Host-only; browser/agent payloads must not carry them.
+  assert.equal('cacheFile' in stats.scan, false, 'scan cache path is stripped')
+  assert.equal(stats.workspaces.every((row) => !('cwd' in row) && !('path' in row)), true, 'workspace cwd paths are stripped')
+  assert.equal(JSON.stringify(stats).includes(dshHome), false, 'the session-home path never reaches the wire')
 
   // Disabled statistics answer with a typed error instead of data.
   const disabled = harness(t, { credentials: okCredentials, config: { pollIntervalMs: 0 } })

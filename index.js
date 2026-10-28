@@ -34,8 +34,8 @@ import {
   sanitizeSettings,
   saveProviderStore,
 } from './lib/provider-store.mjs'
-import { makeCustomAdapter, validateCustomProvider } from './lib/custom-provider.mjs'
-import { redactEndpoint, redactPaths } from './lib/redact.mjs'
+import { makeCustomAdapter, sanitizeUsageBaseURL, validateCustomProvider } from './lib/custom-provider.mjs'
+import { redactEndpoint, redactPaths, redactTextPaths } from './lib/redact.mjs'
 
 /**
  * The one browser-facing route this plugin owns.
@@ -71,7 +71,7 @@ export const inject = []
 export const PLUGIN_NAME = 'dsh-tokenlens'
 
 /** Plugin version; mirrors package.json (kept here so diagnostics need no fs read). */
-export const PLUGIN_VERSION = '1.0.1'
+export const PLUGIN_VERSION = '1.0.2'
 
 /** Documented defaults; every field of the raw row config is optional. */
 const DEFAULTS = {
@@ -258,6 +258,19 @@ export function apply(ctx, rawConfig) {
   }
   const warn = (message) => log('warn', message)
 
+  /** Scrub absolute paths out of free-form error strings before they leave the Host. */
+  function scrubMessagePaths(value, depth = 0) {
+    if (depth > 12) return value
+    if (typeof value === 'string') return redactTextPaths(value)
+    if (Array.isArray(value)) return value.map((entry) => scrubMessagePaths(entry, depth + 1))
+    if (value !== null && typeof value === 'object') {
+      const out = {}
+      for (const [key, entry] of Object.entries(value)) out[key] = scrubMessagePaths(entry, depth + 1)
+      return out
+    }
+    return value
+  }
+
   /** Live state, surfaced through `diagnostics` so a check needs no log file. */
   const state = {
     caches: new Map(), // providerId 鈫?{ snapshot, fetchedAtMs }
@@ -292,10 +305,20 @@ export function apply(ctx, rawConfig) {
       const { mkdir, writeFile, rename } = await import('node:fs/promises')
       const { dirname } = await import('node:path')
       const target = config.statusFile
-      const temporary = `${target}.tmp`
+      const temporary = `${target}.${process.pid}.${Date.now().toString(36)}.tmp`
       await mkdir(dirname(target), { recursive: true })
       await writeFile(temporary, JSON.stringify(redactPaths(statusLatest), null, 2), { encoding: 'utf8', mode: 0o600 })
-      await rename(temporary, target)
+      try {
+        await rename(temporary, target)
+      } catch (error) {
+        try {
+          const { unlink } = await import('node:fs/promises')
+          await unlink(temporary)
+        } catch {
+          /* best-effort cleanup */
+        }
+        throw error
+      }
     } catch (error) {
       warn(`cannot write the status file: ${String(error?.message ?? error)}`)
     }
@@ -331,7 +354,6 @@ export function apply(ctx, rawConfig) {
               windows: cached.snapshot.windows,
               balance: cached.snapshot.balance,
               credits: cached.snapshot.credits,
-              links: cached.snapshot.links,
               fetchedAt: cached.snapshot.fetchedAt,
             },
       ...extra,
@@ -706,7 +728,7 @@ export function apply(ctx, rawConfig) {
       providers,
       dshProviders,
       settings: sanitizeSettings(providerStore.settings),
-      storeFile: providerStoreFile,
+      storeFile: redactPaths(providerStoreFile),
       storeFileDisplay: redactPaths(providerStoreFile),
     }
   }
@@ -723,7 +745,10 @@ export function apply(ctx, rawConfig) {
     if (typeof update?.enabled === 'boolean') patch.enabled = update.enabled
     if (typeof update?.apiKey === 'string') patch.apiKey = update.apiKey.trim()
     if (typeof update?.apiKeyRef === 'string') patch.apiKeyRef = update.apiKeyRef.trim()
-    if (typeof update?.baseURL === 'string') patch.baseURL = update.baseURL.trim()
+    if (typeof update?.baseURL === 'string') {
+      const rawBaseURL = update.baseURL.trim()
+      patch.baseURL = rawBaseURL === '' ? '' : sanitizeUsageBaseURL(rawBaseURL)
+    }
     if (typeof update?.consoleUrl === 'string') patch.consoleUrl = update.consoleUrl.trim()
     if (typeof update?.label === 'string') {
       const label = update.label.trim()
@@ -745,9 +770,12 @@ export function apply(ctx, rawConfig) {
       if (value === '') delete existing[key]
       else existing[key] = value
     }
-    if (Object.keys(existing).length === 0) delete providerStore.providers[id]
-    else providerStore.providers[id] = existing
-    providerStore = saveProviderStore(providerStoreFile, providerStore)
+    const nextProviders = { ...providerStore.providers }
+    if (Object.keys(existing).length === 0) delete nextProviders[id]
+    else nextProviders[id] = existing
+    // Only adopt the new in-memory store after the atomic write succeeded;
+    // otherwise a failed save would leave an unsaved override active.
+    providerStore = saveProviderStore(providerStoreFile, { ...providerStore, providers: nextProviders })
     state.caches.delete(id)
     state.flights.delete(id)
     state.lastErrors.delete(id)
@@ -866,6 +894,15 @@ export function apply(ctx, rawConfig) {
         retryable: false,
       })
     }
+    if (typeof provider.baseURL === 'string' && provider.baseURL.trim() !== '') {
+      try {
+        provider = { ...provider, baseURL: sanitizeUsageBaseURL(provider.baseURL) }
+      } catch {
+        throw new UsageError('parse', `provider ${JSON.stringify(id)} has an unsafe baseURL (https required)`, {
+          retryable: false,
+        })
+      }
+    }
     const adapterId = mapping?.adapterId ?? id
     let keyInfo = { ref: '', source: 'service', detail: `${provider.service ?? 'service'} service` }
     let keyValue = ''
@@ -979,16 +1016,17 @@ export function apply(ctx, rawConfig) {
       const error = errorToWire(new UsageError('disabled', 'no usable provider is enabled', { retryable: false }))
       return { ok: false, error, snapshot: null }
     }
-    state.lastAttempts.set(providerId, new Date().toISOString())
+    const canonicalId = canonicalProviderId(String(providerId))
+    state.lastAttempts.set(canonicalId, new Date().toISOString())
     try {
-      const read = await readProvider(providerId, Date.now())
-      const snapshot = snapshotFromResult(providerId, read, Date.now())
-      state.caches.set(providerId, { snapshot, fetchedAtMs: read.fetchedAtMs })
-      state.lastErrors.delete(providerId)
-      state.requestCounts.set(providerId, (state.requestCounts.get(providerId) ?? 0) + 1)
+      const read = await readProvider(canonicalId, Date.now())
+      const snapshot = snapshotFromResult(canonicalId, read, Date.now())
+      state.caches.set(canonicalId, { snapshot, fetchedAtMs: read.fetchedAtMs })
+      state.lastErrors.delete(canonicalId)
+      state.requestCounts.set(canonicalId, (state.requestCounts.get(canonicalId) ?? 0) + 1)
       announce()
       noteStatus('refresh', {
-        provider: providerId,
+        provider: canonicalId,
         snapshot: {
           fetchedAt: snapshot.fetchedAt,
           provider: snapshot.provider,
@@ -996,20 +1034,19 @@ export function apply(ctx, rawConfig) {
           windows: snapshot.windows,
           balance: snapshot.balance,
           credits: snapshot.credits,
-          links: snapshot.links,
         },
         lastError: null,
       })
-      log('info', `usage refreshed for ${providerId}`)
+      log('info', `usage refreshed for ${canonicalId}`)
       return { ok: true, snapshot }
     } catch (error) {
       const wire = errorToWire(error)
-      state.lastErrors.set(providerId, wire)
+      state.lastErrors.set(canonicalId, wire)
       announce()
-      const cached = state.caches.get(providerId) ?? null
+      const cached = state.caches.get(canonicalId) ?? null
       const snapshot = cached === null ? null : asStaleCache(cached.snapshot, Date.now())
-      noteStatus('refresh-failed', { provider: providerId, lastError: wire })
-      warn(`usage refresh failed for ${providerId}: ${wire.code}: ${wire.message}`)
+      noteStatus('refresh-failed', { provider: canonicalId, lastError: wire })
+      warn(`usage refresh failed for ${canonicalId}: ${wire.code}: ${wire.message}`)
       return { ok: false, error: wire, snapshot }
     }
   }
@@ -1026,21 +1063,22 @@ export function apply(ctx, rawConfig) {
       const error = errorToWire(new UsageError('disabled', 'no usable provider is enabled', { retryable: false }))
       return { ok: false, error, snapshot: null }
     }
-    const cached = state.caches.get(providerId)
+    const canonicalId = canonicalProviderId(String(providerId))
+    const cached = state.caches.get(canonicalId)
     if (cached !== undefined && options.force !== true) {
       const now = Date.now()
       if (isFresh(cached.snapshot, now, config.minRefreshIntervalMs)) {
         return { ok: true, snapshot: asCacheHit(cached.snapshot, now) }
       }
     }
-    const flight = state.flights.get(providerId)
+    const flight = state.flights.get(canonicalId)
     if (flight !== undefined) return await flight
-    const started = performRefresh(providerId)
-    state.flights.set(providerId, started)
+    const started = performRefresh(canonicalId)
+    state.flights.set(canonicalId, started)
     try {
       return await started
     } finally {
-      if (state.flights.get(providerId) === started) state.flights.delete(providerId)
+      if (state.flights.get(canonicalId) === started) state.flights.delete(canonicalId)
     }
   }
 
@@ -1104,7 +1142,7 @@ export function apply(ctx, rawConfig) {
   /** Token statistics for the dialog: today + all-time totals. */
   /** Whether the last snapshot of this provider represents a subscription/plan. */
   function providerHasSubscription(providerId) {
-    const cached = state.caches.get(providerId)
+    const cached = state.caches.get(canonicalProviderId(String(providerId)))
     const snapshot = cached?.snapshot
     if (snapshot === null || snapshot === undefined || snapshot.ok !== true) return false
     // A paid plan id is the strongest signal.
@@ -1189,6 +1227,35 @@ export function apply(ctx, rawConfig) {
     return { ...stats, workspaces: [...merged.values()].sort((a, b) => b.total - a.total) }
   }
 
+  /** Stats payload boundary: drop local absolute paths before they leave the Host. */
+  function sanitizeStatsForWire(stats) {
+    if (stats === null || typeof stats !== 'object') return stats
+    const out = redactPaths(stats)
+    const harnesses = ['zcode', 'opencode', 'workbuddy', 'qoder']
+    for (const id of harnesses) {
+      if (out[id] === null || typeof out[id] !== 'object') continue
+      const { dbPath, root, home, ...rest } = out[id]
+      out[id] = rest
+    }
+    if (out.scan !== null && typeof out.scan === 'object') {
+      const { cacheFile, failures, ...rest } = out.scan
+      out.scan = {
+        ...rest,
+        failures: Array.isArray(failures)
+          ? failures.map(({ path, ...entry }) => entry)
+          : [],
+      }
+    }
+    if (Array.isArray(out.workspaces)) {
+      out.workspaces = out.workspaces.map(({ cwd, path, ...row }) => row)
+    }
+    out.workspaces = out.workspaces.map((row) => ({
+      ...row,
+      path: String(row.path ?? row.cwd ?? '').split(/[\\/]/).filter(Boolean).pop() ?? '',
+    }))
+    return scrubMessagePaths(out)
+  }
+
   async function getStats(options = {}) {
     if (statsService === null) {
       return {
@@ -1210,7 +1277,7 @@ export function apply(ctx, rawConfig) {
               })),
             }
           : stats
-      return { ok: true, stats: decorated }
+      return { ok: true, stats: sanitizeStatsForWire(decorated) }
     } catch (error) {
       const wire = errorToWire(error)
       warn(`token statistics failed: ${wire.code}: ${wire.message}`)
@@ -1281,7 +1348,7 @@ export function apply(ctx, rawConfig) {
       subscribers: state.subscribers.size,
       poll: { running: state.poll.timer !== null, intervalMs: config.pollIntervalMs },
     }
-    return redactPaths(payload)
+    return scrubMessagePaths(redactPaths(payload))
   }
 
   // ---- service -------------------------------------------------------------
@@ -1313,7 +1380,17 @@ export function apply(ctx, rawConfig) {
       return () => state.subscribers.delete(listener)
     },
     diagnostics,
-    config: () => ({ ...config, providers: { ...config.providers } }),
+    config: () => ({
+      ...config,
+      // Provider config may carry a literal apiKey from a profile override;
+      // other composed plugins only need the non-secret shape.
+      providers: Object.fromEntries(
+        Object.entries(config.providers).map(([id, provider]) => [
+          id,
+          { ...provider, apiKey: undefined },
+        ]),
+      ),
+    }),
   }
   ctx.provide('planUsage', service)
   // v1 compatibility: the plugin used to expose only the OpenCode route.
