@@ -1,0 +1,114 @@
+# dsh-tokenlens bundle patch (v2, provider-aware).
+#
+# The `insert` row mounts the Host half. Its `config` is the plugin's raw
+# configuration; every field is optional, and the values shown are the defaults.
+# Override any of them from the profile patch
+# ($DSH_HOME/profiles/<profile>/cordis.patch.yml) by repeating the row id:
+#
+#   - id: dsh-tokenlens
+#     name: 'dsh-tokenlens'
+#     config:
+#       defaultProvider: commandcode
+#       providers:
+#         commandcode:
+#           enabled: false
+#
+# A matching override replaces the complete config, so restate every field you
+# want to keep. Per-provider overrides merge over the built-in provider defaults
+# (they are not a wholesale replacement).
+- insert:
+    - id: dsh-tokenlens
+      name: 'dsh-tokenlens'
+      config:
+        # false unloads the Host bridge, the agent tool and the poll timer.
+        enabled: true
+        # Fallback when the browser has not reported a selected provider yet.
+        defaultProvider: 'opencode-go'
+        # How long a cached snapshot may be served without asking upstream.
+        minRefreshIntervalMs: 20000
+        # Upstream request timeout (each provider request).
+        timeoutMs: 15000
+        # Background poll while a browser half is connected; 0 disables it.
+        pollIntervalMs: 120000
+        # Optional absolute path for a diagnostics JSON (dev aid; empty disables).
+        statusFile: ''
+        # Management-page overrides (enabled / apiKey / baseURL / consoleUrl).
+        # Empty selects $DSH_HOME/dsh-tokenlens/providers.json.
+        providerStoreFile: ''
+        # Token statistics: provider-scoped local usage from the enabled harnesses
+        # (today / last 30 days / all time, per canonical provider).
+        stats:
+          enabled: true
+          # How long a computed answer is reused; `stats` with fresh:true rescans.
+          ttlMs: 30000
+          # A harness whose local data store is gone (uninstalled) is hidden from
+          # the dialog by default; true keeps a 'not installed' row for debugging.
+          showUninstalled: false
+          # Empty selects $DSH_HOME/dsh-tokenlens/usage-cache.json.
+          cacheFile: ''
+          # Empty selects $DSH_HOME (where sessions/ lives).
+          dshHome: ''
+          # Which local harnesses feed the token statistics.
+          harnesses:
+            dsh: true
+            # ZCode keeps per-request usage in a local SQLite DB; read-only,
+            # counters only, and a missing DB is reported as unavailable.
+            zcode: true
+            # OpenCode CLI keeps per-message usage in a local SQLite DB; same
+            # read-only treatment (missing DB -> unavailable row, no failure).
+            opencode: true
+            # WorkBuddy/CodeBuddy CLI and Qoder CN CLI: Claude-Code-style JSONL
+            # transcripts, read-only, counters only (missing dir -> unavailable row).
+            workbuddy: true
+            qoder: true
+          zcode:
+            # Empty selects ~/.zcode/cli/db/db.sqlite (or $ZCODE_DB_PATH).
+            dbPath: ''
+            # Map ZCode's own provider ids onto canonical DSH providers so that
+            # e.g. its opencode-go usage counts toward the selected opencode-go.
+            # Custom ZCode providers are additionally matched by model catalog.
+            providerAliases:
+              opencode-go-chat: opencode-go
+          opencode:
+            # Empty selects ~/.local/share/opencode/opencode.db (or $OPENCODE_DB_PATH).
+            dbPath: ''
+            # Map OpenCode CLI provider ids (its own zen/custom routes) onto a DSH
+            # provider; empty by default because the routes are unrelated plans.
+            providerAliases: {}
+          workbuddy:
+            # Empty selects ~/.workbuddy/projects (or $WORKBUDDY_HOME/projects).
+            root: ''
+            # WorkBuddy records no provider id (model ids only) -> stays unmapped.
+            providerAliases: {}
+          qoder:
+            # Empty selects ~/.qoder-cn (or $QODER_HOME).
+            home: ''
+            # Custom providers are resolved from settings.json base URLs first;
+            # these aliases apply to the remaining provider ids.
+            providerAliases: {}
+        # Per-provider overrides merged over the built-in defaults.
+        providers:
+          opencode-go:
+            enabled: true
+            baseURL: 'https://opencode.ai'
+            usagePath: '/inference/go/v1/usage'
+            apiKeyRef: 'OPENCODE_GO_API_KEY'
+            # Provider console/usage page the dialog footer links to (optional).
+            consoleUrl: 'https://opencode.ai/console'
+          commandcode:
+            enabled: true
+            baseURL: 'https://api.commandcode.ai'
+            creditsPath: '/alpha/billing/credits'
+            subscriptionsPath: '/alpha/billing/subscriptions'
+            whoamiPath: '/alpha/whoami'
+            apiKeyRef: 'COMMANDCODE_API_KEY'
+          deepseek:
+            enabled: true
+            baseURL: 'https://api.deepseek.com'
+            balancePath: '/user/balance'
+            apiKeyRef: 'DEEPSEEK_API_KEY'
+          # DeepSeek Account (the signed-in Platform provider) reports the
+          # account balance through the composed deepseekAccount service.
+          deepseek-account:
+            enabled: true
+            label: 'DeepSeek Account'

@@ -1,0 +1,51 @@
+# Publish dsh-TokenLens to npm when a version tag is pushed.
+#
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# Requires the repository secret NPM_TOKEN (an npm automation/granular token
+# with publish rights for the `dsh-tokenlens` package) and npm provenance,
+# which needs `id-token: write` and a public repository.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js and the npm registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Check that the tag matches package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node -e "const version=require('./package.json').version; const tag=process.env.TAG.replace(/^v/,''); if(version!==tag){console.error('package.json version '+version+' does not match tag '+tag); process.exit(1)} console.log('releasing v'+version)"
+
+      - name: Run the test suite
+        run: node --test
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,164 @@
+name: Bug report
+description: Report a reproducible problem with dsh-TokenLens (词元透镜)
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem.
+
+        **Before you submit:** remove every API key, token, cookie and credential, and
+        redact personal paths and usage numbers you do not want to publish. Never paste a
+        secret into a GitHub issue — a leaked key must be revoked by you, we cannot do it.
+
+        > **Security vulnerabilities must not be reported here.** Please follow
+        > [SECURITY.md](https://github.com/daigahou/dsh-tokenlens/blob/main/SECURITY.md)
+        > and report privately through GitHub Security Advisories.
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: dsh-TokenLens version
+      description: Shown in the dialog footer, or the `version` field of the plugin entry.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      description: DSH Desktop or CLI version (title bar, Help → About, or `dsh --version`).
+      placeholder: "e.g. 1.4.2 (Desktop, Windows)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Windows (other)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Other / container
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version (optional)
+      description: Only needed if you run the plugin or the test suite outside DSH Desktop. Run `node --version`.
+      placeholder: "v24.x"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: providers
+    attributes:
+      label: Providers configured when the problem happened
+      description: Select every provider that was configured or selected. Nothing secret is collected here.
+      multiple: true
+      options:
+        - None / not sure
+        - OpenCode
+        - Command Code
+        - DeepSeek
+        - DeepSeek Account
+        - OpenRouter
+        - Moonshot / Kimi
+        - SiliconFlow
+        - StepFun
+        - Novita
+        - Hyperbolic
+        - DeepInfra
+        - Z.ai GLM Coding Plan
+        - MiniMax Coding Plan
+        - Volcengine Ark
+        - Zhipu AI (China)
+        - A custom provider adapter
+        - Another provider (describe below)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: harnesses
+    attributes:
+      label: Local harness statistics enabled
+      description: Which local data sources were enabled in the plugin settings? Leave empty if unknown.
+      options:
+        - label: DSH sessions
+        - label: ZCode
+        - label: OpenCode CLI
+        - label: WorkBuddy / CodeBuddy
+        - label: Qoder CN
+        - label: None / not sure
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Be specific — which provider, which view (chart/data), which click.
+      placeholder: |
+        1. Select provider "..." in DSH
+        2. Click the usage chip under the composer
+        3. Switch to the chart view
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact error text or a short description of the wrong value/layout.
+      placeholder: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics output (strongly recommended)
+      description: |
+        Ask the DSH agent to call the `tokenlens_usage` tool with action `diagnostics`, then
+        paste the JSON result here. It contains versions, bridge state and error summaries —
+        no API keys — but review it and redact local paths before posting.
+      placeholder: 'Paste the JSON returned by tokenlens_usage with action "diagnostics"'
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or logs (optional)
+      description: Crop or blur account names and usage numbers you do not want to publish.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed all API keys, tokens, cookies and credentials from this report and its attachments.
+          required: true
+        - label: I searched the existing issues and did not find this problem.
+          required: true
+        - label: I can reproduce this on the latest release with the latest DSH version.
+          required: false

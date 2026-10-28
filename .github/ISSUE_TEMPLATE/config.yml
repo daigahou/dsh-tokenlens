@@ -1,0 +1,9 @@
+# Issue template configuration.
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/daigahou/dsh-tokenlens/security/policy
+    about: Please report security issues privately — never in a public issue.
+  - name: Documentation and installation
+    url: https://github.com/daigahou/dsh-tokenlens#readme
+    about: Read the README first; most installation and configuration questions are answered there.

@@ -1,0 +1,38 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+# dsh-TokenLens has zero runtime dependencies; this only protects local
+# experiments from being committed.
+node_modules/
+
+# ── Local-only material (never publish) ───────────────────────────────────────
+# .dev/  — local development scripts, probes, research notes and backups
+# .refs/ — third-party packages extracted from the DSH app.asar for reference
+.dev/
+.refs/
+
+# ── Build and release artifacts ───────────────────────────────────────────────
+releases/
+*.tgz
+*.tar.gz
+coverage/
+
+# ── Logs and scratch files ────────────────────────────────────────────────────
+*.log
+*.bak
+*.bak.*
+*.tmp
+tmp/
+
+# ── Operating system noise ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Editor / tooling state ────────────────────────────────────────────────────
+.idea/
+.vscode/
+
+# ── Credentials ───────────────────────────────────────────────────────────────
+# npm reads .npmrc for registry tokens; never commit one.
+.npmrc
+.env
+.env.*

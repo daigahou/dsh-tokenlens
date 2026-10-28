@@ -1,0 +1,72 @@
+{
+  "name": "dsh-tokenlens",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "dsh-TokenLens (词元透镜) — provider-aware plan capacity plus local token statistics (today/7d/30d/all-time, by harness/provider/model/workspace) for DSH.",
+  "license": "MIT",
+  "author": "daigahou",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daigahou/dsh-tokenlens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daigahou/dsh-tokenlens/issues"
+  },
+  "homepage": "https://github.com/daigahou/dsh-tokenlens#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "usage",
+    "tokens",
+    "quota",
+    "token-statistics",
+    "opencode",
+    "commandcode",
+    "cordis"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "lib/*.mjs",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "PROTOCOL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "prepublishOnly": "node --test"
+  },
+  "meta": {
+    "title": "dsh-TokenLens · 词元透镜",
+    "description": "词元透镜（dsh-TokenLens）：聚合所选供应商套餐容量、本机 Token 统计、按 Harness/供应商/模型/工作区的用量与可消耗额度估算。"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-model-selection"
+      ]
+    }
+  }
+}

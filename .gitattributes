@@ -1,0 +1,32 @@
+# Normalize line endings on check-in; the repository itself stores LF.
+# The explicit `eol=lf` also covers extension-less files (.gitignore, LICENSE, …).
+* text=auto eol=lf
+
+# Source, configuration and documentation: LF in the repository and on checkout.
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.svg   text eol=lf
+LICENSE text eol=lf
+
+# Windows helper scripts keep CRLF.
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary assets must never go through EOL conversion.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.tgz   binary
+*.zip   binary
