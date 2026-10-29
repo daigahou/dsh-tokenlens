@@ -5,7 +5,9 @@
 // Reads the publish time and engines.dsh from the npm registry, keeps the
 // existing entries, and writes the index back. Used by the release workflow after
 // `npm publish`, and safe to run locally. Exits 0 without changes when the
-// version is already listed.
+// version is already listed. The registry can take a while to expose the publish
+// time right after a release, so missing data is retried (MARKET_INDEX_ATTEMPTS /
+// MARKET_INDEX_DELAY_MS).
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +15,8 @@ import { fileURLToPath } from 'node:url'
 const PACKAGE = 'dsh-tokenlens'
 const REGISTRY = `https://registry.npmjs.org/${PACKAGE}`
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+const ATTEMPTS = Number(process.env.MARKET_INDEX_ATTEMPTS ?? 24)
+const DELAY_MS = Number(process.env.MARKET_INDEX_DELAY_MS ?? 5000)
 
 const raw = String(process.argv[2] ?? '').trim()
 const version = raw.replace(/^v/, '')
@@ -35,6 +39,8 @@ if (plugin.versions.some((entry) => entry.version === version)) {
   process.exit(0)
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function fetchJson(url, attempts = 5) {
   let lastError
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -44,16 +50,26 @@ async function fetchJson(url, attempts = 5) {
       return await response.json()
     } catch (error) {
       lastError = error
-      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, attempt * 2000))
+      if (attempt < attempts) await sleep(attempt * 2000)
     }
   }
   throw lastError
 }
 
-const meta = await fetchJson(REGISTRY)
-const publishedAt = meta.time?.[version]
-if (typeof publishedAt !== 'string' || Number.isNaN(Date.parse(publishedAt))) {
-  console.error(`npm registry does not report a publish time for ${PACKAGE}@${version}`)
+let publishedAt
+for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+  const meta = await fetchJson(REGISTRY)
+  publishedAt = meta.time?.[version]
+  const listed = meta.versions?.[version] !== undefined
+  if (listed && typeof publishedAt === 'string' && !Number.isNaN(Date.parse(publishedAt))) break
+  publishedAt = undefined
+  if (attempt < ATTEMPTS) {
+    console.warn(`npm registry has not published ${PACKAGE}@${version} yet (attempt ${attempt}/${ATTEMPTS}), retrying in ${DELAY_MS}ms`)
+    await sleep(DELAY_MS)
+  }
+}
+if (publishedAt === undefined) {
+  console.error(`npm registry did not report ${PACKAGE}@${version} within ${ATTEMPTS} attempts`)
   process.exit(1)
 }
 
@@ -62,6 +78,8 @@ const entry = {
   publishTimestamp: Math.floor(Date.parse(publishedAt) / 1000),
   source: { type: 'npm' },
 }
+// The range lives in the published package; read it from the registry document.
+const meta = await fetchJson(REGISTRY)
 const dshRange = meta.versions?.[version]?.engines?.dsh
 if (typeof dshRange === 'string' && dshRange !== '') entry.engines = { dsh: dshRange }
 plugin.versions.push(entry)

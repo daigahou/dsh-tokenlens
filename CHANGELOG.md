@@ -5,6 +5,10 @@
 用 `scripts/bump-version.mjs <version> "<说明>"` 一次完成 `package.json` + `index.js`
 （`PLUGIN_VERSION`）+ 本文件的同步更新。
 
+## 1.0.6 — 2026-10-29
+
+- fix(market): 发布后等待 npm registry 同步再写索引（自动重试）；索引补录 1.0.5
+
 ## 1.0.5 — 2026-10-29
 
 - feat(market): 提供 DSH 插件市场索引（market/index.json + icon）并支持发布后自动同步；README 增加从 DSH 市场安装的说明
