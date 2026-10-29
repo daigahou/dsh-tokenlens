@@ -2,6 +2,10 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)：修复 = PATCH，新功能 = MINOR，不兼容变更 = MAJOR。发布时同步更新 `package.json` 的 `version`、`index.js` 的 `PLUGIN_VERSION` 与本文件（`node scripts/bump-version.mjs <version> "<note>"`）；已发布的条目保持原样。
 
+## 1.0.9 — 2026-10-29
+
+- ci: GitHub Actions 升级到 v7（actions/checkout、actions/setup-node），发布链路仅依赖 OIDC
+
 ## 1.0.8 — 2026-10-29
 
 - fix(release): npm registry 发布延迟时索引更新回退到 PUBLISH_TIMESTAMP；补录 1.0.7 到市场索引
