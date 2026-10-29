@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.2，公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.4，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -80,10 +80,19 @@
 ### 前置条件
 
 - **DSH Desktop**：插件在 DSH 内运行；DSH Desktop 自带 Node.js 24 运行时，无需另外安装 Node。
+- **DSH 0.2.1-rc.3 或更新的 0.2.x**（插件声明 `engines.dsh: ">=0.2.1-rc.3 <0.3.0-0"`）。
 - 一个可用的 DSH profile（下文的 `<profile>`，常见为 `desktop`）。
 - `$DSH_HOME` 默认为 `~/.dsh`（Windows 下即 `%USERPROFILE%\.dsh`）。
 
+| 安装方式 | 适用场景 |
+|---|---|
+| [方式 A：从 npm 安装](#方式-a从-npm-安装推荐) | 插件已发布到 npm 后（推荐，可走「中国大陆镜像源」） |
+| [方式 B：从 GitHub 安装](#方式-b从-github-安装当前可用) | npm 发布前，或想直接跟仓库最新代码 |
+| [方式 C：本地源码 link](#方式-c本地开发从源码-link) | 开发者改代码 |
+
 ### 方式 A：从 npm 安装（推荐）
+
+> 若 npm 上还查不到 `dsh-tokenlens`（尚未发布时），请先用[方式 B](#方式-b从-github-安装当前可用) 从 GitHub 安装。
 
 1. 用 DSH 自带的 `dsh` CLI 安装插件包：
 
@@ -113,7 +122,23 @@ dsh plugin --profile <profile> add dsh-tokenlens
 
 > 不同 DSH 版本的 `plugin add` 可能已自动写入 `dependencies` 与 `bundles`；已存在时跳过对应步骤即可。
 
-### 方式 B：本地开发（从源码 link）
+### 方式 B：从 GitHub 安装（当前可用）
+
+npm 发布前，可以直接用仓库地址安装（需要能访问 GitHub）：
+
+1. DSH → 侧边栏「插件」→「添加插件」；
+2. 输入 `https://github.com/daigahou/dsh-tokenlens`（或 `github:daigahou/dsh-tokenlens`），选择安装源后点「安装」；
+3. 安装完成后 DSH 会把它选入 profile 的 `dsh.profile.bundles` 并默认启用；若界面没有变化，重启 DSH。
+
+等价的 CLI 写法（只安装依赖，仍需手动把 `dsh-tokenlens` 加入 `dsh.profile.bundles`）：
+
+```powershell
+dsh plugin --profile <profile> add "github:daigahou/dsh-tokenlens"
+```
+
+> 注意：GitHub 源安装的是**默认分支最新提交**（不是 tag），DSH 不支持原地升级，升级时先卸载再安装。国内网络访问 GitHub 可能不稳定；插件发布到 npm 后建议改用方式 A。
+
+### 方式 C：本地开发（从源码 link）
 
 克隆仓库后，把 profile 的依赖指向本地目录（`link:` 形式，仅开发者使用）：
 
@@ -357,7 +382,7 @@ cd dsh-tokenlens
 node --test        # 231 个用例
 ```
 
-本地联调安装方式见[方式 B](#方式-b本地开发从源码-link)。
+本地联调安装方式见[方式 C](#方式-c本地开发从源码-link)。
 
 ### 目录结构
 

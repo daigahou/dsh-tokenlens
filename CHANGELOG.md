@@ -5,6 +5,10 @@
 用 `scripts/bump-version.mjs <version> "<说明>"` 一次完成 `package.json` + `index.js`
 （`PLUGIN_VERSION`）+ 本文件的同步更新。
 
+## 1.0.4 — 2026-10-29
+
+- chore: 插件市场元数据（dsh-plugin 关键词、engines.dsh）与 GitHub 源安装说明
+
 ## 1.0.3 — 2026-10-29
 
 - fix(stats): 逐帧解压 zstd，兼容 Node >= 24.22（尾部撕裂帧不再拖垮整份日志，修复 CI 三平台失败）
