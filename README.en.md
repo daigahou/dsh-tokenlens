@@ -9,7 +9,7 @@
 
 > One glance at your usage: plan capacity for the selected provider plus local token statistics across harnesses, right below the DSH composer.
 
-**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.0.4. It keeps two kinds of numbers separate:
+**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.0.5. It keeps two kinds of numbers separate:
 
 - **Plan capacity** — the provider's authoritative server-side values (percentage windows, used / cap, balance or remaining credit);
 - **Local token stats** — tokens consumed on this machine across every connected harness, for the selected provider or for all providers combined.
@@ -57,9 +57,7 @@ Everything is computed locally: zero runtime dependencies, no external database,
 
 Prerequisites: DSH Desktop 0.2.1-rc.3 or newer 0.2.x (the plugin declares `engines.dsh: ">=0.2.1-rc.3 <0.3.0-0"`, and DSH bundles Node.js 24), an existing DSH profile, and `$DSH_HOME` (default `~/.dsh`).
 
-**Option A — from npm (recommended once published).**
-
-> If `dsh-tokenlens` is not on npm yet, use Option B below.
+**Option A — from npm (recommended).** `dsh-tokenlens` is published on [npm](https://www.npmjs.com/package/dsh-tokenlens); the DSH install-source picker also offers a mainland-China mirror.
 
 ```powershell
 dsh plugin --profile <profile> add dsh-tokenlens
@@ -68,13 +66,13 @@ dsh plugin --profile <profile> add dsh-tokenlens
 Then make sure `dsh.profile.bundles` in `$DSH_HOME/profiles/<profile>/package.json` contains `"dsh-tokenlens"`:
 
 ```jsonc
-{ "dependencies": { "dsh-tokenlens": "^1.0.4" },
+{ "dependencies": { "dsh-tokenlens": "^1.0.5" },
   "dsh": { "profile": { "bundles": ["…", "dsh-tokenlens"] } } }
 ```
 
 Restart DSH or wait for profile hot recomposition.
 
-**Option B — from GitHub (available now).** In DSH, open **Plugins → Add plugin**, enter `https://github.com/daigahou/dsh-tokenlens` (or `github:daigahou/dsh-tokenlens`) and install. DSH selects the bundle in `dsh.profile.bundles` and enables it by default. CLI equivalent (installs the dependency only; add `"dsh-tokenlens"` to `dsh.profile.bundles` yourself):
+**Option B — from GitHub.** In DSH, open **Plugins → Add plugin**, enter `https://github.com/daigahou/dsh-tokenlens` (or `github:daigahou/dsh-tokenlens`) and install. DSH selects the bundle in `dsh.profile.bundles` and enables it by default. CLI equivalent (installs the dependency only; add `"dsh-tokenlens"` to `dsh.profile.bundles` yourself):
 
 ```powershell
 dsh plugin --profile <profile> add "github:daigahou/dsh-tokenlens"
@@ -83,6 +81,17 @@ dsh plugin --profile <profile> add "github:daigahou/dsh-tokenlens"
 GitHub installs track the latest commit on the default branch (not a tag); updates require uninstall + reinstall, and GitHub access can be unreliable from some networks.
 
 **Option C — from source.** `dsh plugin --profile <profile> add "link:<path-to-dsh-tokenlens>"`.
+
+**Option D — from the DSH plugin market.** This repository maintains a DSH plugin market index ([`market/index.json`](market/index.json)); add it once and the plugin shows up in the **Discover** tab with a one-click install:
+
+1. DSH → **Plugins** → **More** next to *Experimental plugins* → enable **Custom plugin market**;
+2. Open **Discover** → **Add index source** → paste:
+   ```
+   https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/market/index.json
+   ```
+3. Search for `TokenLens` in **Discover** and install.
+
+> The index is served over GitHub raw; use Option A instead on networks that cannot reach GitHub. Each release workflow run adds the new version to the index automatically.
 
 Uninstall: `dsh plugin --profile <profile> remove dsh-tokenlens`, remove it from `dsh.profile.bundles`, restart DSH.
 

@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "title": {
+    "en": "dsh-TokenLens",
+    "zh": "dsh-TokenLens · 词元透镜"
+  },
+  "description": {
+    "en": "Plan capacity for the selected provider plus local cross-harness token statistics, right below the DSH composer.",
+    "zh": "在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 统计。"
+  },
+  "plugins": [
+    {
+      "name": "dsh-tokenlens",
+      "title": {
+        "en": "dsh-TokenLens",
+        "zh": "dsh-TokenLens · 词元透镜"
+      },
+      "description": {
+        "en": "Provider-aware plan capacity (OpenCode, Command Code, DeepSeek, OpenRouter, Moonshot, Z.ai, Volcengine and more) plus local token statistics for today / 7 days / 30 days / all time across DSH, ZCode, OpenCode CLI, WorkBuddy and Qoder.",
+        "zh": "按所选供应商显示套餐容量（OpenCode / Command Code / DeepSeek / OpenRouter / Moonshot / Z.ai / 火山引擎 等 15 家适配器），并汇总 DSH、ZCode、OpenCode CLI、WorkBuddy、Qoder 上的本机 Token 用量（今日 / 7 天 / 30 天 / 总计）。"
+      },
+      "icon": "icon.svg",
+      "author": "daigahou",
+      "homepage": "https://github.com/daigahou/dsh-tokenlens#readme",
+      "repository": {
+        "url": "https://github.com/daigahou/dsh-tokenlens"
+      },
+      "versions": [
+        {
+          "version": "1.0.4",
+          "publishTimestamp": 1793286462,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.3 <0.3.0-0"
+          }
+        }
+      ]
+    }
+  ]
+}

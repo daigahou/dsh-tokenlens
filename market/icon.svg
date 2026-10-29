@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="dsh-TokenLens">
+  <defs>
+    <linearGradient id="g" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5B8CFF"/>
+      <stop offset="1" stop-color="#9B5CFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#12151C"/>
+  <circle cx="28" cy="28" r="12.5" fill="none" stroke="url(#g)" stroke-width="5"/>
+  <path d="M37.5 37.5 49 49" stroke="url(#g)" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="24" cy="24.5" r="3" fill="#7DD3FC"/>
+  <circle cx="32.5" cy="27" r="2.4" fill="#A78BFA"/>
+  <circle cx="25.5" cy="32" r="2.4" fill="#34D399"/>
+</svg>

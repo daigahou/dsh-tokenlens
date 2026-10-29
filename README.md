@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.4，公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.5，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -86,13 +86,14 @@
 
 | 安装方式 | 适用场景 |
 |---|---|
-| [方式 A：从 npm 安装](#方式-a从-npm-安装推荐) | 插件已发布到 npm 后（推荐，可走「中国大陆镜像源」） |
-| [方式 B：从 GitHub 安装](#方式-b从-github-安装当前可用) | npm 发布前，或想直接跟仓库最新代码 |
+| [方式 A：从 npm 安装](#方式-a从-npm-安装推荐) | 推荐；国内用户可选「中国大陆镜像源」 |
+| [方式 B：从 GitHub 安装](#方式-b从-github-安装当前可用) | npm 不可用时，或想直接跟仓库最新代码 |
 | [方式 C：本地源码 link](#方式-c本地开发从源码-link) | 开发者改代码 |
+| [方式 D：从 DSH 插件市场安装](#方式-d从-dsh-插件市场安装) | 在 DSH「发现」页浏览/一键安装 |
 
 ### 方式 A：从 npm 安装（推荐）
 
-> 若 npm 上还查不到 `dsh-tokenlens`（尚未发布时），请先用[方式 B](#方式-b从-github-安装当前可用) 从 GitHub 安装。
+`dsh-tokenlens` 已发布到 npm（最新版见 [npm](https://www.npmjs.com/package/dsh-tokenlens)）；国内网络可在 DSH 的安装源里选择「中国大陆镜像源」。
 
 1. 用 DSH 自带的 `dsh` CLI 安装插件包：
 
@@ -105,7 +106,7 @@ dsh plugin --profile <profile> add dsh-tokenlens
 ```jsonc
 {
   "dependencies": {
-    "dsh-tokenlens": "^1.0.0"
+    "dsh-tokenlens": "^1.0.5"
   },
   "dsh": {
     "profile": {
@@ -154,6 +155,19 @@ dsh plugin --profile <profile> add "link:<path-to-dsh-tokenlens>"
 ```
 
 本地开发时，Host 端（`index.js` / `lib/`）改动需要重启或重新加载 profile 才能生效；浏览器端 `client.js` 的改动可能被客户端热替换。
+
+### 方式 D：从 DSH 插件市场安装
+
+本仓库维护了一份 DSH 插件市场索引（[`market/index.json`](market/index.json)），在 DSH 里添加一次索引源，就能在「发现」页搜索、查看并一键安装：
+
+1. 打开 DSH → 侧边栏「插件」→「实验性插件」旁的「更多」→ 打开 **自定义插件市场**；
+2. 「已安装」旁出现 **发现** 标签 → 点 **添加索引源**，粘贴：
+   ```
+   https://raw.githubusercontent.com/daigahou/dsh-tokenlens/main/market/index.json
+   ```
+3. 在「发现」里搜索 `TokenLens`（或浏览 `dsh-TokenLens` 卡片）→ 安装。
+
+> 索引通过 GitHub raw 分发；无法访问 GitHub 的网络环境请改用[方式 A](#方式-a从-npm-安装推荐)。索引里的版本信息由 release workflow 在每次发布后自动更新。
 
 ### 验证安装
 
