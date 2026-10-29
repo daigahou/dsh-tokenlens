@@ -5,6 +5,10 @@
 用 `scripts/bump-version.mjs <version> "<说明>"` 一次完成 `package.json` + `index.js`
 （`PLUGIN_VERSION`）+ 本文件的同步更新。
 
+## 1.0.3 — 2026-10-29
+
+- fix(stats): 逐帧解压 zstd，兼容 Node >= 24.22（尾部撕裂帧不再拖垮整份日志，修复 CI 三平台失败）
+
 ## 1.0.2 — 2026-10-28
 
 - fix(security+privacy): audit hardening — OpenCode auth key scoping, workspace badge observer loop, canonical provider cache keys, stats path redaction incl. free-form errors, baseURL HTTPS validation (profile/custom), effective-day full history, prototype-pollution-safe maps, WorkBuddy no-id dedupe, immutable provider store writes, secure temp files, DST-safe windows, console link/provider aliases, management scroll; screenshots sanitized
