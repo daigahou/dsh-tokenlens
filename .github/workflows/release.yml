@@ -59,7 +59,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git checkout -B market-index-update origin/main
-          node scripts/update-market-index.mjs "$REF_NAME"
+          PUBLISH_TIMESTAMP=$(date +%s) node scripts/update-market-index.mjs "$REF_NAME"
           if git diff --quiet -- market/index.json; then
             echo 'market/index.json is already up to date'
             exit 0

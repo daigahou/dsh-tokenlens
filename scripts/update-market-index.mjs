@@ -5,9 +5,12 @@
 // Reads the publish time and engines.dsh from the npm registry, keeps the
 // existing entries, and writes the index back. Used by the release workflow after
 // `npm publish`, and safe to run locally. Exits 0 without changes when the
-// version is already listed. The registry can take a while to expose the publish
-// time right after a release, so missing data is retried (MARKET_INDEX_ATTEMPTS /
-// MARKET_INDEX_DELAY_MS).
+// version is already listed.
+//
+// npm can take a few minutes to make a fresh release visible. When the registry
+// still does not report it after MARKET_INDEX_ATTEMPTS tries, PUBLISH_TIMESTAMP
+// (Unix seconds, supplied by the release workflow as `date +%s`) is used instead;
+// the local package.json provides engines.dsh in that case.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,8 +18,9 @@ import { fileURLToPath } from 'node:url'
 const PACKAGE = 'dsh-tokenlens'
 const REGISTRY = `https://registry.npmjs.org/${PACKAGE}`
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
-const ATTEMPTS = Number(process.env.MARKET_INDEX_ATTEMPTS ?? 24)
+const ATTEMPTS = Number(process.env.MARKET_INDEX_ATTEMPTS ?? 12)
 const DELAY_MS = Number(process.env.MARKET_INDEX_DELAY_MS ?? 5000)
+const FALLBACK_TIMESTAMP = Number(process.env.PUBLISH_TIMESTAMP ?? 0)
 
 const raw = String(process.argv[2] ?? '').trim()
 const version = raw.replace(/^v/, '')
@@ -56,17 +60,23 @@ async function fetchJson(url, attempts = 5) {
   throw lastError
 }
 
+let meta = null
 let publishedAt
 for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
-  const meta = await fetchJson(REGISTRY)
-  publishedAt = meta.time?.[version]
-  const listed = meta.versions?.[version] !== undefined
-  if (listed && typeof publishedAt === 'string' && !Number.isNaN(Date.parse(publishedAt))) break
-  publishedAt = undefined
+  meta = await fetchJson(REGISTRY)
+  const candidate = meta.time?.[version]
+  if (meta.versions?.[version] !== undefined && typeof candidate === 'string' && !Number.isNaN(Date.parse(candidate))) {
+    publishedAt = candidate
+    break
+  }
   if (attempt < ATTEMPTS) {
     console.warn(`npm registry has not published ${PACKAGE}@${version} yet (attempt ${attempt}/${ATTEMPTS}), retrying in ${DELAY_MS}ms`)
     await sleep(DELAY_MS)
   }
+}
+if (publishedAt === undefined && Number.isInteger(FALLBACK_TIMESTAMP) && FALLBACK_TIMESTAMP > 0) {
+  publishedAt = new Date(FALLBACK_TIMESTAMP * 1000).toISOString()
+  console.warn(`npm registry did not report ${PACKAGE}@${version}; using PUBLISH_TIMESTAMP ${publishedAt}`)
 }
 if (publishedAt === undefined) {
   console.error(`npm registry did not report ${PACKAGE}@${version} within ${ATTEMPTS} attempts`)
@@ -78,9 +88,15 @@ const entry = {
   publishTimestamp: Math.floor(Date.parse(publishedAt) / 1000),
   source: { type: 'npm' },
 }
-// The range lives in the published package; read it from the registry document.
-const meta = await fetchJson(REGISTRY)
-const dshRange = meta.versions?.[version]?.engines?.dsh
+// Prefer the published package's engines.dsh; fall back to the local package.json.
+let dshRange = meta?.versions?.[version]?.engines?.dsh
+if (typeof dshRange !== 'string' || dshRange === '') {
+  try {
+    dshRange = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))?.engines?.dsh
+  } catch {
+    dshRange = undefined
+  }
+}
 if (typeof dshRange === 'string' && dshRange !== '') entry.engines = { dsh: dshRange }
 plugin.versions.push(entry)
 plugin.versions.sort((a, b) => (b.publishTimestamp ?? 0) - (a.publishTimestamp ?? 0))
