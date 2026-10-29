@@ -1,6 +1,6 @@
 # 贡献指南 · Contributing to dsh-TokenLens
 
-感谢你愿意参与「dsh-TokenLens · 词元透镜」！本文说明本地开发、测试、提交与发版约定。英文摘要见文末。
+感谢你愿意参与「dsh-TokenLens · 词元透镜」！本文说明本地开发、测试、提交与发版流程。英文摘要见文末。
 
 ## 先决条件
 
@@ -101,7 +101,7 @@ docs: explain how to add a provider adapter
 
 ## 发版规则（维护者）
 
-本项目约定：**每一轮有文件变更的改动都必须升一次版本号，并同步更新 CHANGELOG**。
+维护者每次发布前递增一次版本号，并同步更新 `CHANGELOG.md`：
 
 - 修 bug → **PATCH**（1.0.1、1.0.2 …）
 - 新功能 → **MINOR**（1.1.0、1.2.0 …）
@@ -110,21 +110,21 @@ docs: explain how to add a provider adapter
 升版本只需一条命令，它会同步 `package.json` 的 `version`、`index.js` 的 `PLUGIN_VERSION`，并在 `CHANGELOG.md` 顶部插入一条记录：
 
 ```bash
-node scripts/bump-version.mjs 1.0.1 "fix: 修复某供应商金额窗口解析"
+node scripts/bump-version.mjs 1.1.0 "feat: 某个新功能"
 ```
 
 然后提交并推 tag：
 
 ```bash
 git add -A
-git commit -m "chore(release): v1.0.1"
-git tag v1.0.1
+git commit -m "chore(release): v1.1.0"
+git tag v1.1.0
 git push origin main --tags
 ```
 
-推送 tag 后，`.github/workflows/release.yml` 会依次：校验 tag 与 `package.json` 版本一致 → 跑 `node --test` → 执行 `npm publish --provenance --access public`（使用仓库 secret `NPM_TOKEN`，并附带 npm provenance 来源证明）。
+推送 tag 后，`.github/workflows/release.yml` 会依次：校验 tag 与 `package.json` 版本一致 → 跑 `node --test` → 通过 npm Trusted Publishing（OIDC）执行 `npm publish --provenance --access public` → 把新版本写入插件市场索引（`market/index.json`）并提交回 `main`。
 
-**外部贡献者不需要改版本号**：由维护者在合并后的发版轮次统一升版本、更新 CHANGELOG，避免每个 PR 互相冲突。
+**外部贡献者不需要改版本号**：由维护者在发版时统一处理版本号与 CHANGELOG，避免每个 PR 互相冲突。
 
 ## Pull Request 要求
 

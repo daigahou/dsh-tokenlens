@@ -4,9 +4,10 @@
 #   git tag v1.0.5
 #   git push origin v1.0.5
 #
-# Publishing needs the repository secret NPM_TOKEN (an npm automation/granular
-# token with publish rights for the `dsh-tokenlens` package) and npm provenance,
-# which needs `id-token: write` and a public repository. Updating the market
+# Publishing uses npm Trusted Publishing (OIDC), so no token is stored here:
+# configure the package's trusted publisher on npmjs.com for this repository and
+# the workflow file name `release.yml`, and allow the "npm publish" action.
+# Provenance needs `id-token: write` and a public repository. Updating the market
 # index commits back to main, which needs `contents: write`.
 name: Release
 
@@ -49,8 +50,6 @@ jobs:
 
       - name: Publish with provenance
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Update the plugin market index
         env:

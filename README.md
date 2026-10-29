@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.6，公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.7，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -87,7 +87,7 @@
 | 安装方式 | 适用场景 |
 |---|---|
 | [方式 A：从 npm 安装](#方式-a从-npm-安装推荐) | 推荐；国内用户可选「中国大陆镜像源」 |
-| [方式 B：从 GitHub 安装](#方式-b从-github-安装当前可用) | npm 不可用时，或想直接跟仓库最新代码 |
+| [方式 B：从 GitHub 安装](#方式-b从-github-安装备用) | npm 不可用时，或想直接跟仓库最新代码 |
 | [方式 C：本地源码 link](#方式-c本地开发从源码-link) | 开发者改代码 |
 | [方式 D：从 DSH 插件市场安装](#方式-d从-dsh-插件市场安装) | 在 DSH「发现」页浏览/一键安装 |
 
@@ -106,7 +106,7 @@ dsh plugin --profile <profile> add dsh-tokenlens
 ```jsonc
 {
   "dependencies": {
-    "dsh-tokenlens": "^1.0.6"
+    "dsh-tokenlens": "^1.0.7"
   },
   "dsh": {
     "profile": {
@@ -123,9 +123,9 @@ dsh plugin --profile <profile> add dsh-tokenlens
 
 > 不同 DSH 版本的 `plugin add` 可能已自动写入 `dependencies` 与 `bundles`；已存在时跳过对应步骤即可。
 
-### 方式 B：从 GitHub 安装（当前可用）
+### 方式 B：从 GitHub 安装（备用）
 
-npm 发布前，可以直接用仓库地址安装（需要能访问 GitHub）：
+无法访问 npm（或想直接跟踪仓库最新代码）时，可以用仓库地址安装（需要能访问 GitHub）：
 
 1. DSH → 侧边栏「插件」→「添加插件」；
 2. 输入 `https://github.com/daigahou/dsh-tokenlens`（或 `github:daigahou/dsh-tokenlens`），选择安装源后点「安装」；

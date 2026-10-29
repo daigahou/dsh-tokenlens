@@ -1,6 +1,6 @@
 {
   "name": "dsh-tokenlens",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "type": "module",
   "description": "dsh-TokenLens (词元透镜) — provider-aware plan capacity plus local token statistics (today/7d/30d/all-time, by harness/provider/model/workspace) for DSH.",
   "license": "MIT",
