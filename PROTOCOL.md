@@ -318,7 +318,7 @@ needs no provider catalog of its own.
 
 The dialog 「供应商管理」 page talks to three additional actions:
 
-- `{action:"providers"}` → `{ok:true, providers:[{providerId,label,shortLabel,kind,enabled,hasKey,keySource,apiKeyRef,baseURL,consoleUrl,builtin,dshManaged,dshProviderId}], dshProviders:[{providerId,label,supported,usageProviderId}], settings:{labelStyle:"short"|"full"}, storeFile, storeFileDisplay}`. `storeFile` is the real path (local tooling); `storeFileDisplay` replaces the user's home directory with `~` and is what the management page renders.
+- `{action:"providers"}` → `{ok:true, providers:[{providerId,label,shortLabel,kind,enabled,hasKey,keySource,apiKeyRef,baseURL,consoleUrl,builtin,dshManaged,dshProviderId}], dshProviders:[{providerId,label,supported,usageProviderId}], settings:{labelStyle,defaultView,defaultScope,detailsExpanded,detailsWindow}, storeFile, storeFileDisplay}`. `storeFile` is the real path (local tooling); `storeFileDisplay` replaces the user's home directory with `~` and is what the management page renders.
 - `{action:"providerUpdate", providerId, update:{enabled?,apiKey?,apiKeyRef?,baseURL?,consoleUrl?,label?,shortLabel?}}` → same list payload;
   empty strings clear a stored value (falling back to the profile/default). `label` (全名, ≤40 chars) and
   `shortLabel` (短标签, ≤12 chars) let the management page rename a provider. The shipped management page no
@@ -326,9 +326,7 @@ The dialog 「供应商管理」 page talks to three additional actions:
   saves enabled/consoleUrl/label/shortLabel. Overrides are persisted atomically to
   `$DSH_HOME/dsh-tokenlens/providers.json` (plugin-owned, not the profile patch); the same file also
 - `{action:"providerTest", providerId}` → the normal snapshot envelope (`{ok,snapshot}` or `{ok:false,error}`), forcing one upstream read.
-- `{action:"settingsUpdate", settings:{labelStyle:"short"|"full"}}` → the same providers payload; the choice is
-  persisted in the store (`settings.labelStyle`) and controls whether the composer chip shows each
-  provider's `shortLabel` or full `label`. Invalid values answer `unsupported-provider`.
+- `{action:"settingsUpdate", settings:{labelStyle?:"short"|"full", defaultView?:"chart"|"data", defaultScope?:"provider"|"all", detailsExpanded?:"auto"|"expanded"|"collapsed", detailsWindow?:"today"|"last7Days"|"second"|"total"}}` → the same providers payload; every field is optional and persisted in the store (`settings.*`). `labelStyle` controls whether the composer chip shows each provider's `shortLabel` or full `label`; `defaultView` / `defaultScope` / `detailsExpanded` are the usage-dialog defaults; `detailsWindow` (v1.2.1) is the remembered 明细 donut window (falls back visually to `total` when that window is unavailable on the current provider/host). Invalid values answer `unsupported-provider`.
 
 `dshProviders` lists every route registered in DSH model settings (in order) with a `supported` flag (whether a usage adapter exists); the shipped management page renders those routes as the primary list and keeps unconfigured preset adapters in a collapsed secondary section. `dshManaged`/`dshProviderId` tell the management page that the route already exists in DSH model settings
 (opencode-go / commandcode / deepseek), so the page can inherit the key and base URL instead of asking for them

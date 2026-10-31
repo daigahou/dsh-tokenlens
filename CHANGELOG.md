@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)：修复 = PATCH，新功能 = MINOR，不兼容变更 = MAJOR。发布时同步更新 `package.json` 的 `version`、`index.js` 的 `PLUGIN_VERSION` 与本文件（`node scripts/bump-version.mjs <version> "<note>"`）；已发布的条目保持原样。
 
+## 1.2.1 — 2026-10-31
+
+- feat(settings): 图表模式「明细」环形图的窗口选择（今日 / 最近7天 / 最近X天（或最近30天）/ 总计）持久化到插件设置：点击 pill 立即保存，重开弹窗、切换供应商或重启 DSH 后仍保留上次选择；当前供应商没有该窗口时自动回落到总计
+- feat(wire): `providers` 载荷与 `settingsUpdate` 增加 `settings.detailsWindow`（`today|last7Days|second|total`），旧 Host 会忽略未知字段、旧 client 读取时回落 `total`，双向兼容
+- 修复：请求进行中连续点击窗口时只保留最后一个选择（单定时器 200ms 重试）；「恢复默认设置」同时把窗口重置为总计
+- 测试：255 个自动化用例（新增 5 个持久化回归，更新 8 个既有设置/窗口用例）
+
 ## 1.2.0 — 2026-10-31
 
 - feat(chart): 图表模式点击某一天的柱子可下钻查看**当天 24 小时**的 Token 消耗棒状图（横轴 00:00–23:00，悬浮显示小时与占比，回车/空格同样可操作，返回或再次点击回到日趋势）

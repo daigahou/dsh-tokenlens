@@ -449,6 +449,7 @@ function providersFixture(overrides = {}) {
       defaultView: 'chart',
       defaultScope: 'provider',
       detailsExpanded: 'auto',
+      detailsWindow: 'total',
     },
     storeFile: 'C:/Users/x/.dsh/dsh-tokenlens/providers.json',
     storeFileDisplay: '~/.dsh/dsh-tokenlens/providers.json',
@@ -2946,7 +2947,13 @@ test('a Host without the providers action shows an error state and 返回 still 
 // ---------------------------------------------------------------------------
 
 test('the chip shows the short label by default and the full label after 全名', async () => {
-  let settings = { labelStyle: 'short', defaultView: 'chart', defaultScope: 'provider', detailsExpanded: 'auto' }
+  let settings = {
+    labelStyle: 'short',
+    defaultView: 'chart',
+    defaultScope: 'provider',
+    detailsExpanded: 'auto',
+    detailsWindow: 'total',
+  }
   const plugin = loadPlugin((payload) => {
     if (payload.action === 'hello') return { ok: true }
     if (payload.action === 'stats') return { ok: true, stats: statsFixture() }
@@ -2977,7 +2984,13 @@ test('the chip shows the short label by default and the full label after 全名'
       update,
       {
         action: 'settingsUpdate',
-        settings: { labelStyle: 'full', defaultView: 'chart', defaultScope: 'provider', detailsExpanded: 'auto' },
+        settings: {
+          labelStyle: 'full',
+          defaultView: 'chart',
+          defaultScope: 'provider',
+          detailsExpanded: 'auto',
+          detailsWindow: 'total',
+        },
       },
       'choosing 全名 sends the FULL settings object',
     )
@@ -5837,7 +5850,13 @@ test('the management page splits into 供应商配置 and 插件设置 tabs', as
 })
 
 test('插件设置 shows the current values and saves the FULL settings on every change', async () => {
-  let settings = { labelStyle: 'short', defaultView: 'chart', defaultScope: 'provider', detailsExpanded: 'auto' }
+  let settings = {
+    labelStyle: 'short',
+    defaultView: 'chart',
+    defaultScope: 'provider',
+    detailsExpanded: 'auto',
+    detailsWindow: 'last7Days',
+  }
   const plugin = loadPlugin((payload) => {
     if (payload.action === 'hello') return { ok: true }
     if (payload.action === 'stats') return { ok: true, stats: statsFixture() }
@@ -5864,12 +5883,19 @@ test('插件设置 shows the current values and saves the FULL settings on every
       )
     }
 
-    // Every change sends the FULL four-field settings object.
+    // Every change sends the FULL five-field settings object (v1.2.1 adds the
+    // persisted 明细 donut window to the payload).
     settingOptionOf(tree, 'defaultView', 'data').props.onClick()
     await settle()
     assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
       action: 'settingsUpdate',
-      settings: { labelStyle: 'short', defaultView: 'data', defaultScope: 'provider', detailsExpanded: 'auto' },
+      settings: {
+        labelStyle: 'short',
+        defaultView: 'data',
+        defaultScope: 'provider',
+        detailsExpanded: 'auto',
+        detailsWindow: 'last7Days',
+      },
     })
     tree = renderDialog(plugin)
     assert.equal(settingOptionOf(tree, 'defaultView', 'data').props['data-active'], 'true', 'the answered value is adopted')
@@ -5878,21 +5904,39 @@ test('插件设置 shows the current values and saves the FULL settings on every
     await settle()
     assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
       action: 'settingsUpdate',
-      settings: { labelStyle: 'short', defaultView: 'data', defaultScope: 'all', detailsExpanded: 'auto' },
+      settings: {
+        labelStyle: 'short',
+        defaultView: 'data',
+        defaultScope: 'all',
+        detailsExpanded: 'auto',
+        detailsWindow: 'last7Days',
+      },
     })
 
     settingOptionOf(tree, 'detailsExpanded', 'collapsed').props.onClick()
     await settle()
     assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
       action: 'settingsUpdate',
-      settings: { labelStyle: 'short', defaultView: 'data', defaultScope: 'all', detailsExpanded: 'collapsed' },
+      settings: {
+        labelStyle: 'short',
+        defaultView: 'data',
+        defaultScope: 'all',
+        detailsExpanded: 'collapsed',
+        detailsWindow: 'last7Days',
+      },
     })
 
     settingOptionOf(tree, 'labelStyle', 'full').props.onClick()
     await settle()
     assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
       action: 'settingsUpdate',
-      settings: { labelStyle: 'full', defaultView: 'data', defaultScope: 'all', detailsExpanded: 'collapsed' },
+      settings: {
+        labelStyle: 'full',
+        defaultView: 'data',
+        defaultScope: 'all',
+        detailsExpanded: 'collapsed',
+        detailsWindow: 'last7Days',
+      },
     })
     assert.equal(
       plugin.calls.filter((call) => call.payload.action === 'settingsUpdate').length,
@@ -5926,7 +5970,13 @@ test('插件设置 shows the current values and saves the FULL settings on every
 
 test('插件设置 renders settingsUpdate errors and 恢复默认设置 sends the defaults', async () => {
   let fail = true
-  let settings = { labelStyle: 'short', defaultView: 'chart', defaultScope: 'provider', detailsExpanded: 'auto' }
+  let settings = {
+    labelStyle: 'short',
+    defaultView: 'chart',
+    defaultScope: 'provider',
+    detailsExpanded: 'auto',
+    detailsWindow: 'last7Days',
+  }
   const plugin = loadPlugin((payload) => {
     if (payload.action === 'hello') return { ok: true }
     if (payload.action === 'stats') return { ok: true, stats: statsFixture() }
@@ -5962,13 +6012,20 @@ test('插件设置 renders settingsUpdate errors and 恢复默认设置 sends th
     assert.equal(settingOptionOf(tree, 'defaultView', 'chart').props['data-active'], 'true', 'the failed change is not adopted')
     assert.equal(settingOptionOf(tree, 'defaultView', 'data').props.disabled, false, 'the selector is usable for a retry')
 
-    // 「恢复默认设置」 sends the full Host defaults in one payload.
+    // 「恢复默认设置」 sends the full Host defaults in one payload (v1.2.1: the
+    // persisted 明细 window is part of the defaults).
     fail = false
     findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-settings-reset').props.onClick()
     await settle()
     assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
       action: 'settingsUpdate',
-      settings: { labelStyle: 'full', defaultView: 'chart', defaultScope: 'provider', detailsExpanded: 'auto' },
+      settings: {
+        labelStyle: 'full',
+        defaultView: 'chart',
+        defaultScope: 'provider',
+        detailsExpanded: 'auto',
+        detailsWindow: 'total',
+      },
     })
     tree = renderDialog(plugin)
     assert.equal(settingOptionOf(tree, 'labelStyle', 'full').props['data-active'], 'true', 'the defaults are adopted')
@@ -7299,12 +7356,13 @@ test('the 明细 donut window switch re-aggregates 今日 / 最近7天 / 最近X
     tree = renderDialog(plugin)
     assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'true', 'the window survives a data/chart round-trip')
 
-    // Reopening the dialog resets to 总计 (presentation state, not a setting).
+    // v1.2.1: the window choice is a persisted setting, so reopening the dialog
+    // keeps the last chosen window instead of snapping back to 总计.
     findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-close').props.onClick()
     clickChip(plugin, 'opencode-go')
     await settle()
     tree = renderDialog(plugin)
-    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'true', 'a reopen starts at 总计')
+    assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'true', 'a reopen keeps the last chosen window')
   } finally {
     plugin.dispose()
   }
@@ -7383,3 +7441,177 @@ test('an all-zero donut window keeps the readable empty hint', async () => {
     plugin.dispose()
   }
 })
+
+// ---------------------------------------------------------------------------
+// 明细 window persistence (v1.2.1): the choice is saved to the plugin settings.
+// ---------------------------------------------------------------------------
+
+/** The five display defaults this section's settings-aware Hosts start from. */
+function persistedSettingsFixture(overrides = {}) {
+  return {
+    labelStyle: 'short',
+    defaultView: 'chart',
+    defaultScope: 'provider',
+    detailsExpanded: 'auto',
+    detailsWindow: 'total',
+    ...overrides,
+  }
+}
+
+/**
+ * A plugin whose Host persists display settings in `state.settings` (the way
+ * providers.json does) and answers providers / settingsUpdate from that state.
+ * `answerSettingsUpdate` may substitute the answer, e.g. a stale echo.
+ */
+function loadPersistedSettingsPlugin(state, answerSettingsUpdate = null) {
+  return loadPlugin((payload) => {
+    if (payload.action === 'hello') return { ok: true }
+    if (payload.action === 'stats') return { ok: true, stats: weeklyStatsFixture() }
+    if (payload.action === 'providers') return providersFixture({ settings: state.settings })
+    if (payload.action === 'settingsUpdate') {
+      if (answerSettingsUpdate !== null) return answerSettingsUpdate(payload, state)
+      state.settings = { ...state.settings, ...payload.settings }
+      return providersFixture({ settings: state.settings })
+    }
+    return { ok: true, snapshot: snapshotFixture(payload.providerId) }
+  })
+}
+
+test('the 明细 window choice is saved to the settings and restored on reopen / restart', async () => {
+  const state = { settings: persistedSettingsFixture() }
+  const plugin = loadPersistedSettingsPlugin(state)
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'true', 'no saved choice means 总计')
+
+    // Clicking 今日 saves the FULL five-field settings object.
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    await settle()
+    assert.deepEqual(lastCallWith(plugin, 'settingsUpdate'), {
+      action: 'settingsUpdate',
+      settings: persistedSettingsFixture({ detailsWindow: 'today' }),
+    })
+    assert.equal(state.settings.detailsWindow, 'today', 'the Host persisted the window choice')
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'today').props['data-active'], 'true')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '10.000M', 'the donuts aggregate the 今日 buckets')
+
+    // Closing and reopening the dialog keeps the choice.
+    findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-close').props.onClick()
+    clickChip(plugin, 'opencode-go')
+    await settle()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'today').props['data-active'], 'true', 'a reopen restores 今日')
+  } finally {
+    plugin.dispose()
+  }
+
+  // A fresh bundle (DSH restarted) bootstraps the saved choice from the Host.
+  const restarted = loadPersistedSettingsPlugin(state)
+  try {
+    const tree = await settleDialog(restarted, 'opencode-go')
+    assert.equal(state.settings.detailsWindow, 'today')
+    assert.equal(detailsWindowPillOf(tree, 'today').props['data-active'], 'true', 'a restart restores 今日')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '10.000M', 'and the donuts render that window')
+  } finally {
+    restarted.dispose()
+  }
+})
+
+test('a saved 明细 window the Host cannot render falls back to 总计', async () => {
+  // An old Host payload without last7Days / last30Days buckets.
+  const oldStats = statsFixture({
+    last30Days: null,
+    providers: [
+      {
+        providerId: 'opencode-go',
+        label: 'OpenCode',
+        today: bucket({ total: 1000000 }),
+        last30Days: null,
+        allTime: bucket({ total: 5000000 }),
+        harnesses: {},
+      },
+    ],
+    models: [],
+    zcode: null,
+    daily: [],
+  })
+  const state = { settings: persistedSettingsFixture({ detailsWindow: 'last7Days' }) }
+  const plugin = loadPlugin((payload) => {
+    if (payload.action === 'hello') return { ok: true }
+    if (payload.action === 'stats') return { ok: true, stats: oldStats }
+    if (payload.action === 'providers') return providersFixture({ settings: state.settings })
+    if (payload.action === 'settingsUpdate') {
+      state.settings = { ...state.settings, ...payload.settings }
+      return providersFixture({ settings: state.settings })
+    }
+    return { ok: true, snapshot: snapshotFixture(payload.providerId) }
+  })
+  try {
+    const tree = await settleDialog(plugin, 'opencode-go')
+    assert.equal(detailsWindowPillOf(tree, 'last7Days'), undefined, 'the absent 7-day window keeps its pill hidden')
+    assert.equal(
+      detailsWindowPillOf(tree, 'total').props['data-active'],
+      'true',
+      'an unavailable saved window falls back to 总计 without crashing',
+    )
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '5.000M', 'the donuts read the 总计 bucket')
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('a settingsUpdate answer never overwrites a freshly clicked 明细 window', async () => {
+  const state = { settings: persistedSettingsFixture() }
+  // The Host saves the payload but answers with the pre-click document (a stale
+  // echo, as a slow earlier request would). The client must not repaint the pill.
+  const plugin = loadPersistedSettingsPlugin(state, (payload, current) => {
+    current.settings = { ...current.settings, ...payload.settings }
+    return providersFixture({ settings: persistedSettingsFixture({ detailsWindow: 'total' }) })
+  })
+  try {
+    const tree = await settleDialog(plugin, 'opencode-go')
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    await settle()
+    assert.equal(state.settings.detailsWindow, 'today', 'the click reached the Host')
+    assert.equal(
+      detailsWindowPillOf(renderDialog(plugin), 'today').props['data-active'],
+      'true',
+      'the stale answer does not repaint the clicked pill back to 总计',
+    )
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('a click during an in-flight settings save is retried once after 200ms', async () => {
+  const state = { settings: persistedSettingsFixture() }
+  const plugin = loadPersistedSettingsPlugin(state)
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    // Two quick clicks: the 今日 save is still in flight when 最近7天 lands.
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    tree = renderDialog(plugin)
+    detailsWindowPillOf(tree, 'last7Days').props.onClick()
+    const retries = plugin.timeouts.filter((timeout) => timeout.ms === 200)
+    assert.equal(retries.length, 1, 'exactly one 200ms retry timer is armed')
+    assert.equal(
+      plugin.calls.filter((call) => call.payload.action === 'settingsUpdate').length,
+      1,
+      'the busy click does not start a second request',
+    )
+    await settle()
+    assert.equal(state.settings.detailsWindow, 'today', 'the first save answered')
+
+    // The retry timer fires later: the LAST click is saved, not lost.
+    retries[0].fn()
+    await settle()
+    assert.equal(state.settings.detailsWindow, 'last7Days', 'the retry persists the last clicked window')
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'last7Days').props['data-active'], 'true')
+    assert.equal(lastCallWith(plugin, 'settingsUpdate').settings.detailsWindow, 'last7Days')
+  } finally {
+    plugin.dispose()
+  }
+})
+

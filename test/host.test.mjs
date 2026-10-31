@@ -1083,6 +1083,7 @@ test('the provider management actions list, edit and test providers', async (t) 
   assert.equal(list.body.settings.defaultView, 'chart')
   assert.equal(list.body.settings.defaultScope, 'provider')
   assert.equal(list.body.settings.detailsExpanded, 'auto')
+  assert.equal(list.body.settings.detailsWindow, 'total', 'the v1.2.1 明细 window defaults to 总计')
   assert.equal(openrouter.kind, 'balance')
   assert.equal(typeof openrouter.hasKey, 'boolean')
 
@@ -1132,20 +1133,60 @@ test('the provider management actions list, edit and test providers', async (t) 
   assert.equal(restoredRow.label, 'OpenRouter', 'empty clears the override back to the default')
   assert.equal(restoredRow.shortLabel, 'OR')
 
-  const styled = await bridge(captured, { action: 'settingsUpdate', settings: { labelStyle: 'short', defaultView: 'data', defaultScope: 'all', detailsExpanded: 'expanded' } })
+  const styled = await bridge(captured, { action: 'settingsUpdate', settings: { labelStyle: 'short', defaultView: 'data', defaultScope: 'all', detailsExpanded: 'expanded', detailsWindow: 'last7Days' } })
   assert.equal(styled.body.ok, true)
   assert.equal(styled.body.settings.labelStyle, 'short')
   assert.equal(styled.body.settings.defaultView, 'data')
   assert.equal(styled.body.settings.defaultScope, 'all')
   assert.equal(styled.body.settings.detailsExpanded, 'expanded')
+  assert.equal(styled.body.settings.detailsWindow, 'last7Days', 'the 明细 window is persisted and echoed')
   assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).settings.labelStyle, 'short')
+  assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).settings.detailsWindow, 'last7Days')
   const invalid = await bridge(captured, { action: 'settingsUpdate', settings: { labelStyle: 'huge' } })
   assert.equal(invalid.status, 500)
   assert.equal(invalid.body.error.code, 'unsupported-provider')
+  const invalidWindow = await bridge(captured, { action: 'settingsUpdate', settings: { detailsWindow: 'junk' } })
+  assert.equal(invalidWindow.status, 500)
+  assert.equal(invalidWindow.body.error.code, 'unsupported-provider', 'an unknown 明细 window is refused')
+  assert.match(invalidWindow.body.error.message, /settings\.detailsWindow must be one of today, last7Days, second, total/)
+  assert.equal(
+    JSON.parse(await readFile(storeFile, 'utf8')).settings.detailsWindow,
+    'last7Days',
+    'the refused value never reaches the store',
+  )
 
   const disabled = await bridge(captured, { action: 'providerUpdate', providerId: 'openrouter', update: { enabled: false } })
   assert.equal(disabled.body.providers.find((provider) => provider.providerId === 'openrouter').enabled, false)
   assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).providers.openrouter.enabled, false)
+})
+
+test('an old store file without detailsWindow sanitizes to the 总计 default', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'tokenlens-store-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const storeFile = join(dir, 'providers.json')
+  // A v1.2.0 store: the settings object predates the persisted 明细 window.
+  await writeFile(
+    storeFile,
+    JSON.stringify({ version: 1, settings: { labelStyle: 'short', defaultView: 'data' }, providers: {} }),
+    'utf8',
+  )
+  const { captured } = harness(t, {
+    credentials: okCredentials,
+    config: { minRefreshIntervalMs: 0, pollIntervalMs: 0, providerStoreFile: storeFile },
+  })
+  stubFetch(t, () => jsonResponse(LIVE_PAYLOAD))
+  const list = await bridge(captured, { action: 'providers' })
+  assert.equal(list.body.ok, true)
+  assert.equal(list.body.settings.labelStyle, 'short', 'the old saved settings are kept')
+  assert.equal(list.body.settings.defaultView, 'data')
+  assert.equal(list.body.settings.detailsWindow, 'total', 'the missing window falls back to 总计')
+
+  // Saving one then round-trips through the store file.
+  const saved = await bridge(captured, { action: 'settingsUpdate', settings: { detailsWindow: 'last7Days' } })
+  assert.equal(saved.body.ok, true)
+  assert.equal(saved.body.settings.labelStyle, 'short', 'an unrelated setting keeps its old value')
+  assert.equal(saved.body.settings.detailsWindow, 'last7Days')
+  assert.equal(JSON.parse(await readFile(storeFile, 'utf8')).settings.detailsWindow, 'last7Days')
 })
 test('a snapshot request that names a provider switches the active provider', async (t) => {
   const { captured } = harness(t, { credentials: okCredentials, config: { minRefreshIntervalMs: 0, pollIntervalMs: 0 } })

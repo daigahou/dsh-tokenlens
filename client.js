@@ -66,6 +66,8 @@ window.__ModuleLoader__.load({
     const PROVIDERS_TTL_MS = 30000
     /** Auto-sync cadence of the provider list while the management page is open (v0.17.0). */
     const MANAGEMENT_SYNC_MS = 15000
+    /** Retry delay of a 明细-window save blocked by an in-flight settings request (v1.2.1). */
+    const DETAILS_WINDOW_SAVE_RETRY_MS = 200
     /** How many per-provider / per-model stats rows the dialog lists. */
     const MAX_PROVIDER_ROWS = 5
     const MAX_MODEL_ROWS = 3
@@ -125,14 +127,16 @@ window.__ModuleLoader__.load({
     /** Fixed segment palette of the 明细 donut charts (v0.27.0, color-blind friendly order). */
     const DONUT_PALETTE = ['#22c55e', '#3b82f6', '#f59e0b', '#a855f7', '#06b6d4', '#f97316']
     /**
-     * Host-side display defaults (v0.29.0). 「恢复默认设置」 sends exactly these;
-     * must stay in sync with DEFAULT_SETTINGS in lib/provider-store.mjs.
+     * Host-side display defaults (v0.29.0; the five fields include the v1.2.1
+     * 明细 donut window). 「恢复默认设置」 sends exactly these; must stay in sync
+     * with DEFAULT_SETTINGS in lib/provider-store.mjs.
      */
     const DEFAULT_PLUGIN_SETTINGS = {
       labelStyle: 'full',
       defaultView: 'chart',
       defaultScope: 'provider',
       detailsExpanded: 'auto',
+      detailsWindow: 'total',
     }
 
     const zh = {
@@ -1101,9 +1105,15 @@ window.__ModuleLoader__.load({
       return raw === 'expanded' || raw === 'collapsed' ? raw : 'auto'
     }
 
+    /** One `detailsWindow` setting: 'today' | 'last7Days' | 'second' | 'total' (junk means 总计). */
+    function normalizeDetailsWindow(raw) {
+      return raw === 'today' || raw === 'last7Days' || raw === 'second' ? raw : 'total'
+    }
+
     /**
-     * The four display settings of the `providers` payload (v0.29.0), every field
-     * normalized to a usable value so old Hosts keep the previous defaults.
+     * The five display settings of the `providers` payload (v0.29.0; the 明细
+     * donut window joined them in v1.2.1), every field normalized to a usable
+     * value so old Hosts keep the previous defaults.
      */
     function normalizePluginSettings(raw) {
       const source = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
@@ -1112,6 +1122,7 @@ window.__ModuleLoader__.load({
         defaultView: normalizeDisplayView(source.defaultView),
         defaultScope: normalizeDisplayScope(source.defaultScope),
         detailsExpanded: normalizeDetailsExpanded(source.detailsExpanded),
+        detailsWindow: normalizeDetailsWindow(source.detailsWindow),
       }
     }
 
@@ -1743,8 +1754,9 @@ window.__ModuleLoader__.load({
         // is charted instead of the daily trend, or null (daily trend).
         chartDay: null,
         // v1.2.0 明细 donut window: 'today' | 'last7Days' | 'second' | 'total'.
-        // Presentation state only (never persisted to the plugin settings).
-        detailsWindow: 'total',
+        // v1.2.1: persisted setting (the last choice survives reopening the dialog
+        // and restarting DSH; the startup bootstrap loads it back).
+        detailsWindow: DEFAULT_PLUGIN_SETTINGS.detailsWindow,
         // Provider management page (v0.9.0).
         view: 'usage', // 'usage' | 'management'
         management: defaultManagementState(),
@@ -1795,7 +1807,10 @@ window.__ModuleLoader__.load({
     /** Bumped whenever the selected provider changes; stale responses are dropped. */
     let usageEpoch = 0
 
-    /** The four display settings currently in effect (v0.29.0). */
+    /**
+     * The five display settings currently in effect (v0.29.0; the 明细 donut
+     * window joined them in v1.2.1).
+     */
     function currentPluginSettings() {
       const state = store.get()
       return {
@@ -1803,6 +1818,7 @@ window.__ModuleLoader__.load({
         defaultView: normalizeDisplayView(state.defaultView),
         defaultScope: normalizeDisplayScope(state.defaultScope),
         detailsExpanded: normalizeDetailsExpanded(state.detailsExpanded),
+        detailsWindow: normalizeDetailsWindow(state.detailsWindow),
       }
     }
 
@@ -1825,9 +1841,13 @@ window.__ModuleLoader__.load({
         statsView: settings.defaultView,
         statsScope: settings.defaultScope,
         showDetails: showDetailsFor(settings.detailsExpanded),
+        // v1.2.1: the 明细 donut window is a persisted setting, so reopening the
+        // dialog or switching provider keeps the last saved choice instead of
+        // always snapping back to 总计 (detailsWindowOf still falls back when the
+        // chosen window is absent from the stats payload).
+        detailsWindow: settings.detailsWindow,
         chartHover: null,
         chartDay: null,
-        detailsWindow: 'total',
       }
     }
 
@@ -2024,11 +2044,16 @@ window.__ModuleLoader__.load({
 
     /**
      * Adopt the display settings and wire label cache of a providers payload
-     * (v0.10.0, extended v0.29.0 with the plugin display defaults). The
-     * management list itself is applied by the caller, so a read-only startup
-     * load can reuse this without touching the page state.
+     * (v0.10.0, extended v0.29.0 with the plugin display defaults).
+     *
+     * `options.adoptDetailsWindow` is only set by the startup bootstrap: the
+     * persisted 明细 window must be loaded once, but a plain settingsUpdate
+     * answer must never repaint a just-clicked pill (the answer of an earlier
+     * save would otherwise overwrite the last of a fast click series, v1.2.1).
+     * The management list itself is applied by the caller, so a read-only
+     * startup load can reuse this without touching the page state.
      */
-    function adoptProvidersMeta(parsed) {
+    function adoptProvidersMeta(parsed, options = {}) {
       if (parsed === null || typeof parsed !== 'object') return
       const current = store.get()
       const patch = {}
@@ -2037,6 +2062,9 @@ window.__ModuleLoader__.load({
       if (current.defaultView !== settings.defaultView) patch.defaultView = settings.defaultView
       if (current.defaultScope !== settings.defaultScope) patch.defaultScope = settings.defaultScope
       if (current.detailsExpanded !== settings.detailsExpanded) patch.detailsExpanded = settings.detailsExpanded
+      if (options.adoptDetailsWindow === true && current.detailsWindow !== settings.detailsWindow) {
+        patch.detailsWindow = settings.detailsWindow
+      }
       if (parsed.labelCatalog !== null && typeof parsed.labelCatalog === 'object') {
         const catalog = { ...current.labelCatalog, ...parsed.labelCatalog }
         if (Object.keys(catalog).length > 0) patch.labelCatalog = catalog
@@ -2047,10 +2075,11 @@ window.__ModuleLoader__.load({
     /**
      * Read the providers payload once at controller startup (v0.10.0).
      *
-     * Only the display style and the wire label cache are adopted: the chip must
-     * honor a persisted 'full' style before the 管理 page is ever opened, while
-     * the page keeps its own lazy load. Silent on failure — an old Host without
-     * the action (or an unreachable bridge) keeps the short-label defaults.
+     * Only the display style, the persisted 明细 window and the wire label
+     * cache are adopted: the chip must honor a persisted 'full' style and the
+     * dialog must restore the saved donut window before the 管理 page is ever
+     * opened, while the page keeps its own lazy load. Silent on failure — an
+     * old Host without the action (or an unreachable bridge) keeps the defaults.
      */
     async function bootstrapProviders() {
       let data
@@ -2062,7 +2091,7 @@ window.__ModuleLoader__.load({
       if (data === null || typeof data !== 'object' || data.ok !== true) return { kind: 'envelope' }
       const parsed = normalizeProvidersPayload(data)
       if (parsed === null) return { kind: 'transport' }
-      adoptProvidersMeta(parsed)
+      adoptProvidersMeta(parsed, { adoptDetailsWindow: true })
       return { kind: 'ok' }
     }
 
@@ -2203,10 +2232,11 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Persist one display-settings change (v0.29.0): the FULL four-field settings
-     * object is always sent, because the Host accepts any subset but the page
-     * keeps a single source of truth. The answered payload's settings, wire
-     * labels and provider list are adopted. Never throws.
+     * Persist one display-settings change (v0.29.0): the FULL five-field settings
+     * object is always sent (the v1.2.1 明细 window included), because the Host
+     * accepts any subset but the page keeps a single source of truth. The
+     * answered payload's settings, wire labels and provider list are adopted.
+     * Never throws.
      */
     async function requestSettingsUpdate(settings) {
       const next = normalizePluginSettings(settings)
@@ -2255,7 +2285,37 @@ window.__ModuleLoader__.load({
       return { kind: 'transport' }
     }
 
-    /** Change one display setting; the other three keep their current values. */
+    /** Pending retry timer of the 明细-window save (a single timer, v1.2.1). */
+    let detailsWindowSaveTimer = null
+
+    /**
+     * Persist the 明细 donut window choice (v1.2.1).
+     *
+     * The store field is also the persisted setting value, so a pill click saves
+     * the FULL current settings through `settingsUpdate`. When another settings
+     * request is still in flight, one 200ms retry timer keeps the LAST click of a
+     * fast series (the earlier answer must not overwrite it: adoptProvidersMeta
+     * ignores detailsWindow for non-bootstrap answers). The bridge answers
+     * locally within a few milliseconds, so a single retry is enough. The Host's
+     * answer then refreshes the provider list as usual.
+     */
+    function persistDetailsWindow() {
+      if (detailsWindowSaveTimer !== null) {
+        window.clearTimeout(detailsWindowSaveTimer)
+        detailsWindowSaveTimer = null
+      }
+      if (store.get().management.settingsBusy === true) {
+        detailsWindowSaveTimer = window.setTimeout(() => {
+          detailsWindowSaveTimer = null
+          if (store.get().management.settingsBusy === true) return
+          void requestSettingsUpdate(currentPluginSettings())
+        }, DETAILS_WINDOW_SAVE_RETRY_MS)
+        return
+      }
+      void requestSettingsUpdate(currentPluginSettings())
+    }
+
+    /** Change one display setting; the other four keep their current values. */
     function savePluginSetting(field, value) {
       if (store.get().management.settingsBusy === true) return
       const next = { ...currentPluginSettings(), [field]: value }
@@ -2265,6 +2325,9 @@ window.__ModuleLoader__.load({
     /** 「恢复默认设置」: send the Host-side display defaults as one full payload. */
     function resetPluginSettings() {
       if (store.get().management.settingsBusy === true) return
+      // v1.2.1: reset the persisted 明细 window locally too — a plain
+      // settingsUpdate answer intentionally does not adopt that field.
+      store.set({ detailsWindow: DEFAULT_PLUGIN_SETTINGS.detailsWindow })
       void requestSettingsUpdate({ ...DEFAULT_PLUGIN_SETTINGS })
     }
 
@@ -4382,9 +4445,10 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The active 明细 donut window (v1.2.0): the stored choice while that window
-     * still exists, else 总计. The state lives in the store next to statsView /
-     * statsScope and is never persisted to the plugin settings.
+     * The active 明细 donut window (v1.2.1): the stored choice while that window
+     * still exists, else 总计. Since v1.2.1 the choice is also persisted to the
+     * plugin settings (the startup bootstrap loads it back), so reopening the
+     * dialog / restarting DSH restores it.
      */
     function detailsWindowOf(state, ctx) {
       const key = typeof state.detailsWindow === 'string' ? state.detailsWindow : 'total'
@@ -4415,7 +4479,7 @@ window.__ModuleLoader__.load({
       return bucket === null ? 0 : bucket.total ?? 0
     }
 
-    /** The window pill row under the 明细 donut title (v1.2.0). */
+    /** The window pill row under the 明细 donut title (v1.2.0; saved since v1.2.1). */
     function buildDetailsWindowSwitch(state, ctx, t) {
       const active = detailsWindowOf(state, ctx)
       const option = (key, label) =>
@@ -4429,7 +4493,10 @@ window.__ModuleLoader__.load({
             'data-active': active === key ? 'true' : 'false',
             'aria-pressed': active === key ? 'true' : 'false',
             onClick: () => {
-              if (active !== key) store.set({ detailsWindow: key })
+              if (active !== key) {
+                store.set({ detailsWindow: key })
+                persistDetailsWindow()
+              }
             },
           },
           label,
@@ -5123,7 +5190,7 @@ window.__ModuleLoader__.load({
      * v1.2.0: a 今日 / 最近7天 / 最近X天 / 总计 window switch under the title picks
      * which stats window the three donuts aggregate (default 总计). The pills of
      * windows an old Host does not report are hidden; the state lives in the store
-     * (never persisted to the plugin settings).
+     * and, since v1.2.1, is persisted to the plugin settings.
      */
     function buildStatsDetailsCharts(state, ctx, t) {
       const { stats } = ctx

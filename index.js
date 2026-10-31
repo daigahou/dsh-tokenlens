@@ -25,6 +25,7 @@ import { createUsageStats } from './lib/usage-stats.mjs'
 import {
   DEFAULT_SETTINGS,
   DETAILS_DEFAULTS,
+  DETAILS_WINDOWS,
   DISPLAY_VIEWS,
   LABEL_STYLES,
   STATS_SCOPES,
@@ -71,7 +72,7 @@ export const inject = []
 export const PLUGIN_NAME = 'dsh-tokenlens'
 
 /** Plugin version; mirrors package.json (kept here so diagnostics need no fs read). */
-export const PLUGIN_VERSION = '1.2.0'
+export const PLUGIN_VERSION = '1.2.1'
 
 /** Documented defaults; every field of the raw row config is optional. */
 const DEFAULTS = {
@@ -1654,6 +1655,14 @@ export function apply(ctx, rawConfig) {
             })
           }
           next.detailsExpanded = incoming.detailsExpanded
+        }
+        if (Object.prototype.hasOwnProperty.call(incoming, 'detailsWindow')) {
+          if (!DETAILS_WINDOWS.includes(incoming.detailsWindow)) {
+            throw new UsageError('unsupported-provider', `settings.detailsWindow must be one of ${DETAILS_WINDOWS.join(', ')}`, {
+              retryable: false,
+            })
+          }
+          next.detailsWindow = incoming.detailsWindow
         }
         providerStore = saveProviderStore(providerStoreFile, {
           ...providerStore,
