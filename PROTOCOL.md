@@ -95,9 +95,14 @@ Provider semantics:
 | `commandcode` | `windows` | rolling = 5-hour `used/cap`, weekly = `used/cap`, monthly = `(granted - remaining)/granted` (only when the API reports the grant) | `plan`, `credits` (USD), `account` |
 | `deepseek` (picker id `deepseek-official`) | `balance` | `null` | `balance` (API-key account balance, CNY/USD) |
 | `deepseek-account` | `balance` | `null` | `balance` from the composed Platform account service (signed-in wallets) |
+| `open-design` | `windows` | rolling = 5-hour Design Plan window, weekly = 7-day window, monthly = 30-day window when reported (used / limit credits, capped at 100%) | `balance` (independent wallet balance, USD) |
 
 `balance` is `{ amount, currency }` plus, for the account provider,
 `wallets: [{currency, amount}]` and `bonus: [{currency, amount}]`.
+
+A `windows` snapshot may also carry a non-null `balance` (Open Design reports
+allowance windows and a wallet independently); the Client renders it as one extra
+row at the end of the capacity card and appends the amount to the chip tooltip.
 
 Rules:
 

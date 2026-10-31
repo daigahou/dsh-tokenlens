@@ -71,7 +71,7 @@ export const inject = []
 export const PLUGIN_NAME = 'dsh-tokenlens'
 
 /** Plugin version; mirrors package.json (kept here so diagnostics need no fs read). */
-export const PLUGIN_VERSION = '1.0.9'
+export const PLUGIN_VERSION = '1.1.0'
 
 /** Documented defaults; every field of the raw row config is optional. */
 const DEFAULTS = {
@@ -926,6 +926,49 @@ export function apply(ctx, rawConfig) {
       }
       provider = { ...provider, accessKeyId: accessValue, secretAccessKey: secretValue }
       keyInfo = { ref: accessRef, source: access.source, detail: access.detail }
+    } else if (adapterId === 'open-design') {
+      const workspaceId =
+        String(provider.workspaceId ?? '').trim() || String(process.env.OPENDESIGN_WORKSPACE_ID ?? '').trim()
+      const refs = []
+      for (const ref of [provider.controlKeyRef, 'OPENDESIGN_CONTROL_KEY', 'VELA_CONTROL_KEY']) {
+        if (typeof ref === 'string' && ref.trim() !== '' && !refs.includes(ref.trim())) refs.push(ref.trim())
+      }
+      // The management page's per-provider key field holds the Control Key here
+      // (the inference API key cannot query billing).
+      let controlKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
+      let controlRef = refs[0] ?? 'OPENDESIGN_CONTROL_KEY'
+      let controlSource = controlKey === '' ? 'none' : 'config'
+      let controlDetail = controlKey === '' ? 'no OpenDesign control key found' : 'plugin config'
+      if (controlKey === '') {
+        for (const ref of refs) {
+          const resolved = await resolveApiKey({
+            config: { apiKeyRef: ref },
+            credentials: ctx.get('credentials'),
+            env: process.env,
+          })
+          const value = typeof resolved.value === 'string' ? resolved.value.trim() : ''
+          if (value === '') continue
+          controlKey = value
+          controlRef = resolved.ref ?? ref
+          controlSource = resolved.source
+          controlDetail = resolved.detail
+          break
+        }
+      }
+      if (workspaceId === '') {
+        throw new UsageError(
+          'missing-key',
+          'OpenDesign quota needs a workspace id (providers.open-design.workspaceId or OPENDESIGN_WORKSPACE_ID)',
+          { retryable: false },
+        )
+      }
+      if (controlKey === '') {
+        throw new UsageError('missing-key', `OpenDesign quota needs a Control Key (${refs.join(' / ')})`, {
+          retryable: false,
+        })
+      }
+      provider = { ...provider, workspaceId, controlKey }
+      keyInfo = { ref: controlRef, source: controlSource, detail: controlDetail }
     } else if (typeof provider.apiKeyRef === 'string' && provider.apiKeyRef.trim() !== '') {
       const key = await resolveApiKey({
         config: { apiKeyRef: provider.apiKeyRef, apiKey: provider.apiKey ?? '' },

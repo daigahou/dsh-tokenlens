@@ -688,6 +688,85 @@ test('volcengine Coding Plan quota is read through the signed API', async (t) =>
   assert.equal(tested.body.snapshot.key.ref, 'VOLCENGINE_ACCESS_KEY_ID')
 })
 
+test('OpenDesign quota and wallet are read with the workspace Control Key', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'tokenlens-od-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const { captured } = harness(t, {
+    credentials: { resolve: async () => ({ value: 'od_control_test', source: 'env' }) },
+    config: {
+      minRefreshIntervalMs: 0,
+      pollIntervalMs: 0,
+      providerStoreFile: join(dir, 'providers.json'),
+      providers: { 'open-design': { enabled: true, workspaceId: 'ws_test', controlKeyRef: 'OPENDESIGN_CONTROL_KEY' } },
+    },
+  })
+  const calls = stubFetch(t, (call, url) =>
+    String(url).includes('/wallet/balance')
+      ? jsonResponse({ billingScopeVersion: 2, workspaceId: 'ws_test', workspaceMemberId: 'member_1', balanceUsd: '12.34' })
+      : jsonResponse({
+          workspaceId: 'ws_test',
+          workspaceMemberId: 'member_1',
+          eligible: true,
+          windows: [
+            {
+              policyId: 'plan-5h',
+              durationSeconds: 18000,
+              usedCredits: '250',
+              remainingCredits: '750',
+              limitCredits: '1000',
+              resetsAt: '2026-10-25T11:00:00.000Z',
+            },
+            {
+              policyId: 'plan-7d',
+              durationSeconds: 604800,
+              usedCredits: '300',
+              remainingCredits: '700',
+              limitCredits: '1000',
+              resetsAt: '2026-11-01T00:00:00.000Z',
+            },
+          ],
+        }),
+  )
+  const tested = await bridge(captured, { action: 'providerTest', providerId: 'open-design' })
+  assert.equal(tested.body.ok, true)
+  assert.equal(tested.body.snapshot.provider.id, 'open-design')
+  assert.equal(tested.body.snapshot.windows.rolling.percent, 25)
+  assert.equal(tested.body.snapshot.windows.weekly.percent, 30)
+  assert.equal(tested.body.snapshot.balance.amount, 12.34)
+  assert.equal(tested.body.snapshot.balance.currency, 'USD')
+  assert.equal(tested.body.snapshot.key.ref, 'OPENDESIGN_CONTROL_KEY')
+  assert.equal(calls.length, 2, 'one quota read plus one wallet read')
+  const headers = calls[0].init.headers
+  assert.equal(headers.authorization, 'Bearer od_control_test')
+  assert.equal(headers['x-vela-workspace-id'], 'ws_test')
+  assert.match(String(calls[0].url), /\/api\/v1\/workspaces\/ws_test\/billing\/coding-plan-usage$/)
+})
+
+test('OpenDesign without a workspace id fails with missing-key, never a fabricated window', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'tokenlens-od-noid-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const previous = process.env.OPENDESIGN_WORKSPACE_ID
+  delete process.env.OPENDESIGN_WORKSPACE_ID
+  t.after(() => {
+    if (previous === undefined) delete process.env.OPENDESIGN_WORKSPACE_ID
+    else process.env.OPENDESIGN_WORKSPACE_ID = previous
+  })
+  const { captured } = harness(t, {
+    credentials: okCredentials,
+    config: {
+      minRefreshIntervalMs: 0,
+      pollIntervalMs: 0,
+      providerStoreFile: join(dir, 'providers.json'),
+      providers: { 'open-design': { enabled: true, workspaceId: '', controlKeyRef: 'OPENDESIGN_CONTROL_KEY' } },
+    },
+  })
+  stubFetch(t, () => jsonResponse({ workspaceId: 'ws_test', eligible: true, windows: [] }))
+  const tested = await bridge(captured, { action: 'providerTest', providerId: 'open-design' })
+  assert.equal(tested.body.ok, false)
+  assert.equal(tested.body.error.code, 'missing-key')
+  assert.equal(tested.body.snapshot, null)
+})
+
 test('unknown actions are refused with the legal list', async (t) => {
   const { captured } = harness(t, { credentials: okCredentials, config: { pollIntervalMs: 0 } })
   stubFetch(t, () => jsonResponse(LIVE_PAYLOAD))

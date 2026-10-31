@@ -1,10 +1,10 @@
 /**
  * Built-in provider pool expansion (v0.19.0).
  *
- * Every added provider uses the same metadata shape as the existing pool; no
- * new fields and no usage-adapter protocol were introduced. These entries are
- * therefore recognised/selectable in the management page, while providers
- * without a usage endpoint simply report no snapshot until an adapter exists.
+ * Every added provider uses the same metadata shape as the existing pool.
+ * Introduced here without a usage adapter; `open-design` later gained a
+ * read-only billing adapter (see the OpenDesign tests), the rest still have no
+ * public usage interface and report no snapshot until one exists.
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -18,7 +18,12 @@ const ADDED = {
   'zhipu-cn': { label: '智谱 AI（国内版）', shortLabel: 'ZP', baseURL: 'https://open.bigmodel.cn', kind: 'windows' },
   'intern-ai': { label: 'Intern AI（书生）', shortLabel: 'IA', baseURL: 'https://chat.intern-ai.org.cn' },
   'agnes-ai': { label: 'Agnes AI', shortLabel: 'AG', baseURL: 'https://api.agnes.ai' },
-  'open-design': { label: 'Open Design', shortLabel: 'OD', baseURL: 'https://api.open-design.ai' },
+  'open-design': {
+    label: 'Open Design',
+    shortLabel: 'OD',
+    baseURL: 'https://amr-api.open-design.ai',
+    kind: 'windows',
+  },
   hunyuan: { label: '腾讯混元', shortLabel: 'HY', baseURL: 'https://hunyuan.tencentcloudapi.com' },
   spark: { label: '讯飞星火', shortLabel: 'SP', baseURL: 'https://spark-api-open.xf-yun.com' },
   yi: { label: '零一万物', shortLabel: 'YI', baseURL: 'https://api.lingyiwanwu.com' },

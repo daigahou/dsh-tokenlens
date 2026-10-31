@@ -9,7 +9,7 @@
 
 > One glance at your usage: plan capacity for the selected provider plus local token statistics across harnesses, right below the DSH composer.
 
-**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.0.9. It keeps two kinds of numbers separate:
+**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.1.0. It keeps two kinds of numbers separate:
 
 - **Plan capacity** — the provider's authoritative server-side values (percentage windows, used / cap, balance or remaining credit);
 - **Local token stats** — tokens consumed on this machine across every connected harness, for the selected provider or for all providers combined.
@@ -23,7 +23,7 @@ Everything is computed locally: zero runtime dependencies, no external database,
 - **Data and chart modes** — tables, a daily trend chart and ring charts; breakdowns by harness, provider, top model and unmapped providers.
 - **Provider management page** — enabled / built-in / all filters, enable switches, credential status, console links, label editing, connection tests, subscription badges and plugin settings.
 - **Auto-discovery and agent tool** — providers configured in DSH Settings → Model Services are detected by route id or base-URL host and reuse their DSH credentials; `tokenlens_usage` lets the model query snapshots, local stats and diagnostics.
-- **Local-only** — 5 harnesses (DSH, ZCode, OpenCode CLI, WorkBuddy / CodeBuddy CLI, Qoder CN CLI), 25 built-in providers (15 with plan / balance adapters), read-only local data, no telemetry.
+- **Local-only** — 5 harnesses (DSH, ZCode, OpenCode CLI, WorkBuddy / CodeBuddy CLI, Qoder CN CLI), 25 built-in providers (16 with plan / balance adapters), read-only local data, no telemetry.
 
 ## Screenshots
 
@@ -66,7 +66,7 @@ dsh plugin --profile <profile> add dsh-tokenlens
 Then make sure `dsh.profile.bundles` in `$DSH_HOME/profiles/<profile>/package.json` contains `"dsh-tokenlens"`:
 
 ```jsonc
-{ "dependencies": { "dsh-tokenlens": "^1.0.9" },
+{ "dependencies": { "dsh-tokenlens": "^1.1.0" },
   "dsh": { "profile": { "bundles": ["…", "dsh-tokenlens"] } } }
 ```
 
@@ -105,11 +105,13 @@ Every option is optional. Override the `dsh-tokenlens` row in `$DSH_HOME/profile
 
 Credentials come from DSH itself: providers configured in DSH inherit their `apiKeyEnv`, or you can set environment variables such as `OPENCODE_GO_API_KEY`, `COMMANDCODE_API_KEY` and `DEEPSEEK_API_KEY`.
 
+Open Design (OpenDesign) is the exception: its read-only billing API needs a **workspace ID** plus a **Control Key** (`OPENDESIGN_CONTROL_KEY` or `VELA_CONTROL_KEY`), which is *not* the inference API key from the Cloud API Keys page. Set `providers.open-design.workspaceId` (or `OPENDESIGN_WORKSPACE_ID`) and provide the Control Key through the environment, DSH credentials, or the management page's key field.
+
 See the [Chinese README](README.md) for the full configuration reference, preview and provider tables.
 
 ## Supported providers and harnesses
 
-**Plan capacity / balance adapters:** OpenCode (`opencode-go`, `opencode`), Command Code, DeepSeek, DeepSeek Account, OpenRouter, Moonshot / Kimi, SiliconFlow, StepFun, Novita, Hyperbolic, DeepInfra, Z.ai GLM Coding Plan, MiniMax Coding Plan, Zhipu AI (GLM Coding Plan, CN), Volcengine (Coding / Agent Plan).
+**Plan capacity / balance adapters:** OpenCode (`opencode-go`, `opencode`), Command Code, DeepSeek, DeepSeek Account, OpenRouter, Moonshot / Kimi, SiliconFlow, StepFun, Novita, Hyperbolic, DeepInfra, Z.ai GLM Coding Plan, MiniMax Coding Plan, Zhipu AI (GLM Coding Plan, CN), Volcengine (Coding / Agent Plan), Open Design (Design Plan windows + wallet balance).
 
 **Harnesses:** DSH, ZCode, OpenCode CLI, WorkBuddy / CodeBuddy CLI, Qoder CN CLI.
 
@@ -132,7 +134,7 @@ Host bridge route: `/api/tokenlens`; agent tool: `tokenlens_usage`.
 
 ## Development
 
-Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 231 tests.
+Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 237 tests.
 
 Release: `node scripts/bump-version.mjs <version> "<note>"` updates `package.json`, `PLUGIN_VERSION` and `CHANGELOG.md`; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 

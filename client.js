@@ -3145,7 +3145,13 @@ window.__ModuleLoader__.load({
         return `${providerLabel} · ${parts.join(' · ')}`
       }
       if (snapshot !== null && snapshot.provider.kind === 'windows') {
-        return `${providerLabel} · ${windowsSummaryText(snapshot.windows, t)}`
+        const summary = `${providerLabel} · ${windowsSummaryText(snapshot.windows, t)}`
+        // A windows provider may also carry a wallet balance (OpenDesign): keep the
+        // chip body unchanged and append the money to the hover detail only.
+        if (snapshot.balance !== null) {
+          return `${summary} · ${formatMoney(snapshot.balance.amount, snapshot.balance.currency)}`
+        }
+        return summary
       }
       return `${providerLabel} · ${t('chipNoUsage')}`
     }
@@ -3343,6 +3349,32 @@ window.__ModuleLoader__.load({
             ? null
             : h('span', { className: 'dsh-tokenlens-capacity-money' }, capacityMoney),
           upstreamStatus,
+        ),
+      )
+    }
+
+    /**
+     * The wallet-balance row of a windows provider (OpenDesign).
+     *
+     * Some providers report allowance windows AND an independent account balance:
+     * a `windows` snapshot may therefore carry a non-null `balance`. The row reuses
+     * the window row's label/value layout so it reads as part of the same card, and
+     * the shared narrow-screen wrapping of `.dsh-tokenlens-row-head` keeps it in view.
+     */
+    function buildCapacityBalanceRow(balance, t) {
+      if (balance === null) return null
+      return h(
+        'div',
+        { key: 'balance', className: 'dsh-tokenlens-row', 'data-capacity-balance': 'true' },
+        h(
+          'div',
+          { className: 'dsh-tokenlens-row-head' },
+          h('span', { className: 'dsh-tokenlens-row-label' }, t('balanceLabel')),
+          h(
+            'span',
+            { className: 'dsh-tokenlens-percent dsh-tokenlens-capacity-money' },
+            formatMoney(balance.amount, balance.currency),
+          ),
         ),
       )
     }
@@ -4365,16 +4397,17 @@ window.__ModuleLoader__.load({
           if (card !== null) section.push(card)
           else section.push(h('div', { key: 'no-balance', className: 'dsh-tokenlens-hint' }, t('chipNoUsage')))
         } else if (snapshot.provider.kind === 'windows') {
+          // A windows provider may ALSO report an independent wallet balance
+          // (OpenDesign): show it as one extra row of the same capacity card,
+          // after the allowance windows (or after the "no usage" hint).
+          const balanceRow = buildCapacityBalanceRow(snapshot.balance, t)
           if (snapshot.windows !== null) {
-            section.push(
-              h(
-                'div',
-                { key: 'rows', className: 'dsh-tokenlens-rows' },
-                WINDOW_ORDER.map((id) => buildWindowRow(id, snapshot.windows[id], state, now, t, statsRow)),
-              ),
-            )
+            const rows = WINDOW_ORDER.map((id) => buildWindowRow(id, snapshot.windows[id], state, now, t, statsRow))
+            if (balanceRow !== null) rows.push(balanceRow)
+            section.push(h('div', { key: 'rows', className: 'dsh-tokenlens-rows' }, rows))
           } else {
             section.push(h('div', { key: 'no-windows', className: 'dsh-tokenlens-hint' }, t('chipNoUsage')))
+            if (balanceRow !== null) section.push(balanceRow)
           }
         } else {
           section.push(h('div', { key: 'no-kind', className: 'dsh-tokenlens-hint' }, t('chipNoUsage')))

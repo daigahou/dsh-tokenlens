@@ -30,6 +30,8 @@ import {
   parseZaiQuota,
   parseMinimaxRemains,
   parseOpencodeGo,
+  parseOpenDesignUsage,
+  parseOpenDesignWallet,
   toNumber,
   usedPercent,
 } from '../lib/providers.mjs'
@@ -370,4 +372,63 @@ test('MiniMax remaining percentages are inverted into used windows', () => {
   assert.equal(result.windows.rolling.percent, 27.5)
   assert.equal(result.windows.weekly.percent, 15)
   assert.throws(() => parseMinimaxRemains({ base_resp: { status_code: 1004 } }), (error) => error.code === 'parse')
+})
+
+test('OpenDesign windows map used/limit credits onto the canonical windows', () => {
+  const payload = {
+    workspaceId: 'ws_test',
+    workspaceMemberId: 'member_1',
+    eligible: true,
+    windows: [
+      { policyId: 'plan-5h', durationSeconds: 18000, usedCredits: '250', remainingCredits: '750', limitCredits: '1000', resetsAt: '2026-10-25T11:00:00.000Z' },
+      { policyId: 'plan-7d', durationSeconds: 604800, usedCredits: '1200', remainingCredits: '0', limitCredits: '1000', resetsAt: '2026-11-01T00:00:00.000Z' },
+      { policyId: 'plan-30d', durationSeconds: 2592000, usedCredits: '0', remainingCredits: '500', limitCredits: '500' },
+      { policyId: 'plan-year', durationSeconds: 31536000, usedCredits: '1', remainingCredits: '1', limitCredits: '2' },
+    ],
+  }
+  const result = parseOpenDesignUsage(payload, 'ws_test', NOW)
+  assert.equal(result.windows.rolling.percent, 25)
+  assert.equal(result.windows.rolling.resetsAt, '2026-10-25T11:00:00.000Z')
+  assert.equal(result.windows.rolling.remainingMs, Date.parse('2026-10-25T11:00:00.000Z') - NOW)
+  assert.equal(result.windows.weekly.percent, 100, 'used above the limit clamps at 100%')
+  assert.equal(result.windows.monthly.percent, 0, 'a zero-usage window is a real zero, not a gap')
+})
+
+test('OpenDesign usage refuses mismatched workspaces and malformed windows', () => {
+  const valid = {
+    workspaceId: 'ws',
+    eligible: true,
+    windows: [{ policyId: 'p', durationSeconds: 18000, usedCredits: '1', remainingCredits: '1', limitCredits: '2' }],
+  }
+  assert.throws(() => parseOpenDesignUsage({ ...valid, workspaceId: 'other' }, 'ws', NOW), (error) => error.code === 'parse')
+  assert.throws(() => parseOpenDesignUsage({ ...valid, windows: 'nope' }, 'ws', NOW), (error) => error.code === 'parse')
+  assert.throws(
+    () => parseOpenDesignUsage({ ...valid, windows: [{ ...valid.windows[0], usedCredits: '1.5' }] }, 'ws', NOW),
+    (error) => error.code === 'parse',
+  )
+  assert.throws(
+    () => parseOpenDesignUsage({ ...valid, windows: [] }, 'ws', NOW),
+    (error) => error.code === 'parse',
+    'an eligible plan without usable windows is a server inconsistency',
+  )
+  assert.throws(
+    () => parseOpenDesignUsage({ ...valid, eligible: false }, 'ws', NOW),
+    (error) => error.code === 'parse',
+    'an ineligible plan must not report windows',
+  )
+  const ineligible = parseOpenDesignUsage({ workspaceId: 'ws', eligible: false, windows: [] }, 'ws', NOW)
+  assert.equal(ineligible.windows.rolling, null)
+  assert.equal(ineligible.windows.weekly, null)
+})
+
+test('OpenDesign wallet parses the USD balance and keeps the member identity', () => {
+  const wallet = { billingScopeVersion: 2, workspaceId: 'ws', workspaceMemberId: 'member_1', balanceUsd: '-12.34' }
+  const parsed = parseOpenDesignWallet(wallet, 'ws')
+  assert.equal(parsed.balance.amount, -12.34)
+  assert.equal(parsed.balance.currency, 'USD')
+  assert.equal(parsed.workspaceMemberId, 'member_1')
+  assert.throws(() => parseOpenDesignWallet({ ...wallet, billingScopeVersion: 1 }, 'ws'), (error) => error.code === 'parse')
+  assert.throws(() => parseOpenDesignWallet({ ...wallet, workspaceId: 'other' }, 'ws'), (error) => error.code === 'parse')
+  assert.throws(() => parseOpenDesignWallet({ ...wallet, workspaceMemberId: '' }, 'ws'), (error) => error.code === 'parse')
+  assert.throws(() => parseOpenDesignWallet({ ...wallet, balanceUsd: 'n/a' }, 'ws'), (error) => error.code === 'parse')
 })

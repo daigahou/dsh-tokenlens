@@ -9,7 +9,7 @@
 
 > **一眼看清你的用量**：在 DSH 输入框下方显示当前供应商的套餐容量，并汇总本机跨 Harness 的 Token 消耗。
 
-**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.0.9，公开版本）。它把两类数字**按不同口径**分开呈现：
+**dsh-TokenLens（词元透镜）** 是 DSH（DeepSeek Harness）的用量插件（v1.1.0，公开版本）。它把两类数字**按不同口径**分开呈现：
 
 - **套餐容量**（供应商服务端权威值）：百分比窗口、`已用 / 上限`、账户余额或剩余额度；
 - **本机 Token 统计**（本机记录）：当前供应商在本机所有已接入 Harness 上的合计用量，也可切到「全部 Harness」看总账。
@@ -45,7 +45,7 @@
 - **自动识别**：在 DSH「设置 → 模型服务」中配置过的供应商会自动出现在管理页，并按路由 id 或 baseURL 主机匹配内置用量适配器，自动继承 DSH 中的凭据，无需重复填写。
 - **Agent 工具**：注册 `tokenlens_usage`，模型可以自行查询套餐容量与本机用量。
 
-支持 5 个 Harness：**DSH、ZCode、OpenCode CLI、WorkBuddy / CodeBuddy CLI、Qoder CN CLI**；内置 25 家供应商元数据，其中 15 家带套餐 / 余额适配器。
+支持 5 个 Harness：**DSH、ZCode、OpenCode CLI、WorkBuddy / CodeBuddy CLI、Qoder CN CLI**；内置 25 家供应商元数据，其中 16 家带套餐 / 余额适配器。
 
 ## 效果截图
 
@@ -106,7 +106,7 @@ dsh plugin --profile <profile> add dsh-tokenlens
 ```jsonc
 {
   "dependencies": {
-    "dsh-tokenlens": "^1.0.9"
+    "dsh-tokenlens": "^1.1.0"
   },
   "dsh": {
     "profile": {
@@ -190,6 +190,7 @@ dsh plugin --profile <profile> remove dsh-tokenlens
 - 在 DSH「设置 → 模型服务」中配置过的供应商会被自动识别，插件按路由 id 或 baseURL 主机匹配内置适配器，并继承该路由的 `apiKeyEnv` 凭据。
 - 也可以直接用环境变量提供，例如 `OPENCODE_GO_API_KEY`、`COMMANDCODE_API_KEY`、`DEEPSEEK_API_KEY`、`MOONSHOT_API_KEY` 等（每家供应商的引用见 `lib/providers.mjs`）。
 - 或写入 `$DSH_HOME/.credentials.yaml` 的 `refs:` 映射（与 DSH 凭据服务同一份文档）。
+- **Open Design（OpenDesign）** 的额度查询需要 OpenDesign Cloud 的 **workspace ID + Control Key**（`OPENDESIGN_CONTROL_KEY` 或 `VELA_CONTROL_KEY`），**不是** Cloud API Keys 页的推理 Key（推理 Key 只能调用模型）。workspace ID 写在 provider 配置里，或用 `OPENDESIGN_WORKSPACE_ID` 环境变量；Control Key 也可以在供应商管理页的 Key 输入框填写。
 
 解析顺序（先命中先用）：DSH 凭据服务 → 环境变量 → `$DSH_HOME/.credentials.yaml` → OpenCode CLI 的 `auth.json`（仅默认的 `OPENCODE_GO_API_KEY` 引用）。
 
@@ -239,6 +240,10 @@ dsh plugin --profile <profile> remove dsh-tokenlens
       opencode-go: { enabled: true, apiKeyRef: OPENCODE_GO_API_KEY }
       commandcode: { enabled: true, apiKeyRef: COMMANDCODE_API_KEY }
       deepseek: { enabled: true, apiKeyRef: DEEPSEEK_API_KEY }
+      open-design:                      # 额度查询需要工作区 + Control Key
+        enabled: true
+        workspaceId: '<open-design-workspace-id>'   # 空 = 环境变量 OPENDESIGN_WORKSPACE_ID
+        controlKeyRef: OPENDESIGN_CONTROL_KEY        # 也可用 VELA_CONTROL_KEY
 ```
 
 覆盖规则：
@@ -269,13 +274,15 @@ dsh plugin --profile <profile> remove dsh-tokenlens
 | `minimax` | `GET https://api.minimax.io/v1/api/openplatform/coding_plan/remains`（订阅 Key；国内站 `api.minimaxi.com`） | 5 小时 / 每周 已用百分比（best-effort） |
 | `zhipu-cn` | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit`（`ZHIPU_API_KEY`） | GLM Coding Plan：5 小时 / 本周 / 每月 百分比 + 方案 |
 | `volcengine` | Coding Plan / AgentPlan：`POST https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01`（Signature V4，`VOLCENGINE_ACCESS_KEY_ID` + `VOLCENGINE_SECRET_ACCESS_KEY`） | 5 小时 / 本周 / 每月 百分比 + 档位 |
+| `open-design` | 只读计费接口：`GET https://amr-api.open-design.ai/api/v1/workspaces/{workspaceId}/billing/coding-plan-usage` + `…/wallet/balance`（workspace ID + Control Key：`OPENDESIGN_CONTROL_KEY` / `VELA_CONTROL_KEY`，非推理 Key） | Design Plan 的 5 小时 / 7 天 已用百分比 + 重置时间；钱包余额（USD） |
 
 - OpenCode 的额度定义见[官方文档](https://opencode.ai/docs/go/#usage-limits)（5h = 月度额度的 20%、周 = 50%、月 = 100%）；接口只返回百分比，插件也只画百分比。
 - Command Code 的 `/alpha/*` 是官方 CLI 自用的私有计费路由；免费 / 无方案账户返回空窗口（显示 `—`），插件不会用方案目录猜额度。
+- Open Design 的窗口按账户实际返回的时长渲染：Go 同时有 5 小时和 7 天窗口，Plus / Pro / Max 只有 7 天窗口；钱包余额是独立于窗口的 USD 额度，用尽后继续扣钱包。查询要求工作区权限，鉴权失败会明确显示错误而不是 0。
 - 未配置凭据的供应商 chip 静默隐藏；`zai`、`minimax`、`deepinfra` 属 best-effort 适配（未公开接口，失败时按可重试错误优雅降级）。
 - 各供应商的元数据（`kind` / `label` / `shortLabel` / `baseURL` / `apiKeyRef` / `consoleUrl`）集中在 `lib/providers.mjs` 的 `PROVIDER_DEFAULTS` 与 `ADAPTERS` 中，新增适配器只需在该文件登记并补测试。
 
-另有 10 家**仅元数据**的内置供应商（管理页「内置」中可见）：`sensenova`（商汤 SenseNova）、`qwen`（通义千问）、`qianfan`（百度千帆）、`intern-ai`、`agnes-ai`、`open-design`、`hunyuan`（腾讯混元）、`spark`（讯飞星火）、`yi`（零一万物）、`baichuan`（百川智能）。它们暂缺公开的套餐 / 余额接口适配器，chip 静默隐藏；社区补齐适配器后即可自动生效。
+另有 9 家**仅元数据**的内置供应商（管理页「内置」中可见）：`sensenova`（商汤 SenseNova）、`qwen`（通义千问）、`qianfan`（百度千帆）、`intern-ai`、`agnes-ai`、`hunyuan`（腾讯混元）、`spark`（讯飞星火）、`yi`（零一万物）、`baichuan`（百川智能）。它们没有可用 API Key 查询的公开套餐 / 余额接口：千问 / 百炼的订阅额度只能通过官方 CLI 的控制台登录查询，腾讯混元 / 百度千帆只有云账户余额 API（需云账号 AK/SK），其余供应商仅控制台可见。chip 对它们静默隐藏，后续有稳定接口时再补适配器。
 
 ### 自动识别 DSH 模型设置
 
@@ -382,7 +389,7 @@ Host 半注册 `tokenlens_usage`，参数 `action`（默认 `snapshot`）与可�
 
 ## 验证
 
-- `node --test`：**231 个自动化用例**，覆盖 Host 数据层、供应商适配器、统计折叠、各 harness 读取、插件集成与浏览器端渲染 / 交互。
+- `node --test`：**237 个自动化用例**，覆盖 Host 数据层、供应商适配器、统计折叠、各 harness 读取、插件集成与浏览器端渲染 / 交互。
 - 在真实环境中验证过 **5 个 harness** 的数据源；本机统计与独立的 SQLite 查询、独立的日志解析逐项对账（差额为 0），跨 harness 合并与供应商映射算术自洽。
 - 供应商接口按各官方文档与参考客户端行为验证；未配置凭据时 chip 静默隐藏，接口异常时按可重试错误降级。
 
@@ -393,7 +400,7 @@ Host 半注册 `tokenlens_usage`，参数 `action`（默认 `snapshot`）与可�
 ```powershell
 git clone https://github.com/daigahou/dsh-tokenlens.git
 cd dsh-tokenlens
-node --test        # 231 个用例
+node --test        # 237 个用例
 ```
 
 本地联调安装方式见[方式 C](#方式-c本地开发从源码-link)。

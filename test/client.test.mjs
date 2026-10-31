@@ -206,6 +206,23 @@ function snapshotFixture(providerId = 'opencode-go') {
       links: { console: 'https://platform.deepseek.com/usage' },
     }
   }
+  if (providerId === 'open-design') {
+    return {
+      ...common,
+      provider: { id: 'open-design', label: 'Open Design', kind: 'windows' },
+      plan: null,
+      windows: {
+        rolling: windowFixture(12, 1.5),
+        weekly: windowFixture(34, 48),
+        monthly: null,
+      },
+      // OpenDesign is a WINDOWS provider that also reports a wallet balance.
+      balance: { amount: 12.34, currency: 'USD' },
+      credits: null,
+      account: null,
+      links: null,
+    }
+  }
   if (providerId === 'commandcode') {
     return {
       ...common,
@@ -1371,6 +1388,55 @@ test('a platform-account balance lists wallets and bonus', async () => {
     assert.match(text, /¥12\.50/)
     assert.match(text, /钱包：¥12\.50 · \$0\.50/)
     assert.match(text, /奖励：¥2\.00/)
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('a windows provider with a wallet balance shows it in the capacity card and chip tooltip', async () => {
+  const plugin = loadPlugin((payload) => {
+    if (payload.action === 'hello') return { ok: true }
+    if (payload.action === 'stats') return { ok: true, stats: statsFixture() }
+    return { ok: true, snapshot: snapshotFixture('open-design') }
+  })
+  try {
+    // Chip: the body keeps the two allowance percentages (a third money piece
+    // would crowd it); the balance lives in the hover detail only.
+    const chip = await settleChip(plugin, 'open-design')
+    const button = findElement(chip, (element) => element.props?.className === 'dsh-tokenlens-chip')
+    assert.ok(button, 'the chip renders')
+    assert.doesNotMatch(textOf(button), /12\.34/, 'the chip body does not repeat the balance')
+    const tooltip = findElement(chip, (element) => element.props?.side === 'top')
+    assert.ok(tooltip, 'the chip carries a hover tooltip')
+    assert.match(String(tooltip.props.label), /Open Design · 5 小时 12% · 本周 34% · 本月 — · \$12\.34$/)
+    assert.match(textOf(chip), /\$12\.34/, 'the balance is part of the chip hover detail')
+
+    // Dialog: the balance is one extra row of the 套餐容量 card, after the windows.
+    const tree = await settleDialog(plugin, 'open-design')
+    const text = textOf(tree)
+    assert.match(text, /Open Design/)
+    assert.match(text, /套餐容量/)
+    assert.match(text, /账户余额/)
+    assert.match(text, /\$12\.34/)
+    assert.match(text, /5 小时/, 'the allowance windows still render')
+    assert.match(text, /本周/)
+    const balanceRow = findElement(tree, (element) => element.props?.['data-capacity-balance'] === 'true')
+    assert.ok(balanceRow, 'the capacity card gains one balance row')
+    assert.match(textOf(balanceRow), /账户余额/)
+    assert.match(textOf(balanceRow), /\$12\.34/)
+    // The standalone balance card stays exclusive to balance-kind providers.
+    assert.equal(findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-balance'), undefined)
+    const windowRows = findAll(tree, (element) => element.props?.['data-window'] !== undefined)
+    assert.deepEqual(
+      windowRows.map((row) => row.props['data-window']),
+      ['rolling', 'weekly', 'monthly'],
+      'the three allowance rows keep rendering next to the balance row',
+    )
+    const rowsContainer = findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-rows')
+    assert.ok(rowsContainer, 'the windows render in the rows container')
+    const rowChildren = rowsContainer.children ?? rowsContainer.props?.children ?? []
+    assert.equal(rowChildren.length, 4, 'three allowance rows plus the balance row')
+    assert.equal(rowChildren[3].props['data-capacity-balance'], 'true', 'the balance row comes after the windows')
   } finally {
     plugin.dispose()
   }
