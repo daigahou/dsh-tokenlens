@@ -9,7 +9,7 @@
 
 > One glance at your usage: plan capacity for the selected provider plus local token statistics across harnesses, right below the DSH composer.
 
-**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.1.0. It keeps two kinds of numbers separate:
+**dsh-TokenLens** is a usage plugin for DSH (DeepSeek Harness), version v1.2.0. It keeps two kinds of numbers separate:
 
 - **Plan capacity** — the provider's authoritative server-side values (percentage windows, used / cap, balance or remaining credit);
 - **Local token stats** — tokens consumed on this machine across every connected harness, for the selected provider or for all providers combined.
@@ -20,7 +20,7 @@ Everything is computed locally: zero runtime dependencies, no external database,
 
 - **Usage chip below the composer** — follows the selected model provider and shows its plan capacity; providers without an adapter or credentials stay hidden.
 - **Details dialog** — plan capacity windows with reset times (plus an optional "consumed · estimated consumable" hint) and local token stats for today / last 7 days / last 30 days / all-time, scoped to the current provider or all harnesses.
-- **Data and chart modes** — tables, a daily trend chart and ring charts; breakdowns by harness, provider, top model and unmapped providers.
+- **Data and chart modes** — tables, a daily trend chart and ring charts with breakdowns by harness, provider, top model and unmapped providers. In chart mode, clicking a day's bar drills into that day's 24 hourly bars; the 明细 rings switch between today / last 7 days / last X days (or last 30 days) / all time.
 - **Provider management page** — enabled / built-in / all filters, enable switches, credential status, console links, label editing, connection tests, subscription badges and plugin settings.
 - **Auto-discovery and agent tool** — providers configured in DSH Settings → Model Services are detected by route id or base-URL host and reuse their DSH credentials; `tokenlens_usage` lets the model query snapshots, local stats and diagnostics.
 - **Local-only** — 5 harnesses (DSH, ZCode, OpenCode CLI, WorkBuddy / CodeBuddy CLI, Qoder CN CLI), 25 built-in providers (16 with plan / balance adapters), read-only local data, no telemetry.
@@ -66,7 +66,7 @@ dsh plugin --profile <profile> add dsh-tokenlens
 Then make sure `dsh.profile.bundles` in `$DSH_HOME/profiles/<profile>/package.json` contains `"dsh-tokenlens"`:
 
 ```jsonc
-{ "dependencies": { "dsh-tokenlens": "^1.1.0" },
+{ "dependencies": { "dsh-tokenlens": "^1.2.0" },
   "dsh": { "profile": { "bundles": ["…", "dsh-tokenlens"] } } }
 ```
 
@@ -134,7 +134,7 @@ Host bridge route: `/api/tokenlens`; agent tool: `tokenlens_usage`.
 
 ## Development
 
-Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 237 tests.
+Node.js ≥ 24, zero runtime dependencies: `node --test` runs the 250 tests.
 
 Release: `node scripts/bump-version.mjs <version> "<note>"` updates `package.json`, `PLUGIN_VERSION` and `CHANGELOG.md`; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 

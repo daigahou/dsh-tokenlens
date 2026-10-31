@@ -38,7 +38,7 @@ async function opencodeDatabase(t, rows) {
   return path
 }
 
-test('readOpencodeUsage normalizes OpenCode token semantics per day/provider/model', async (t) => {
+test('readOpencodeUsage normalizes OpenCode token semantics per (day, hour, provider, model)', async (t) => {
   const path = await opencodeDatabase(t, [
     {
       time: at(TODAY, 10),
@@ -83,17 +83,34 @@ test('readOpencodeUsage normalizes OpenCode token semantics per day/provider/mod
   ])
   const result = readOpencodeUsage({ dbPath: path })
   assert.equal(result.harness, 'opencode')
-  assert.equal(result.rows, 2, 'one group per day/provider/model')
-  const todayGroup = result.groups.find((group) => group.day === TODAY)
-  assert.deepEqual(todayGroup.bucket, {
-    input: 6915 + 500,
-    output: 146 + 100 + 150,
-    cacheRead: 1728 + 250,
+  assert.equal(result.rows, 3, 'one group per (day, hour, provider, model)')
+  assert.deepEqual(result.groups.map((group) => [group.day, group.hour, group.providerId]), [
+    [YESTERDAY, 10, 'opencode'],
+    [TODAY, 10, 'huoshanyinqing'],
+    [TODAY, 11, 'huoshanyinqing'],
+  ])
+  // Two messages of the same day/provider/model in different local hours stay
+  // distinct; the zero-token row at 09:00 leaves no group behind.
+  const todayGroups = result.groups.filter((group) => group.day === TODAY)
+  assert.deepEqual(todayGroups.map((group) => group.hour), [10, 11])
+  assert.deepEqual(todayGroups.find((group) => group.hour === 10).bucket, {
+    input: 6915,
+    output: 146,
+    cacheRead: 1728,
     cacheWrite: 0,
-    total: 8789 + 1000,
-    messages: 2,
+    total: 8789,
+    messages: 1,
+  })
+  assert.deepEqual(todayGroups.find((group) => group.hour === 11).bucket, {
+    input: 500,
+    output: 250,
+    cacheRead: 250,
+    cacheWrite: 0,
+    total: 1000,
+    messages: 1,
   })
   const yesterdayGroup = result.groups.find((group) => group.day === YESTERDAY)
+  assert.equal(yesterdayGroup.hour, 10)
   assert.equal(yesterdayGroup.providerId, 'opencode')
   assert.deepEqual(yesterdayGroup.bucket, {
     input: 200,

@@ -72,6 +72,7 @@ test('readWorkbuddyUsage normalizes rawUsage, dedupes and skips zero rows', asyn
   assert.equal(result.rows, 2)
   assert.equal(result.requests, 2)
   const today = result.groups.find((group) => group.day === '2026-10-25')
+  assert.equal(today.hour, 10, 'the group carries the local hour')
   assert.deepEqual(today.bucket, {
     input: 600,
     output: 200,
@@ -105,8 +106,9 @@ test('WorkBuddy records without any request/message id are not collapsed', async
   ])
   const result = readWorkbuddyUsage({ root: dir })
   assert.equal(result.requests, 2, 'both valid records are counted')
-  assert.equal(result.groups.length, 1)
-  assert.equal(result.groups[0].bucket.total, 402, '101 + 301 tokens')
+  assert.equal(result.groups.length, 2, 'different local hours are separate groups')
+  assert.deepEqual(result.groups.map((group) => group.hour), [10, 11])
+  assert.equal(result.groups.reduce((sum, group) => sum + group.bucket.total, 0), 402, '101 + 301 tokens')
 })
 
 test('readQoderUsage reads assistant usage, dedupes by message id and maps provider base URLs', async (t) => {
@@ -159,6 +161,7 @@ test('readQoderUsage reads assistant usage, dedupes by message id and maps provi
   assert.equal(result.requests, 2)
   const commandcode = result.groups.find((group) => group.providerId === 'commandcode')
   assert.equal(commandcode.day, '2026-10-25')
+  assert.equal(commandcode.hour, 10)
   assert.deepEqual(commandcode.bucket, {
     input: 700,
     output: 200,
@@ -168,6 +171,7 @@ test('readQoderUsage reads assistant usage, dedupes by message id and maps provi
     messages: 1,
   })
   const ark = result.groups.find((group) => group.providerId.includes('volces'))
+  assert.equal(ark.hour, 10)
   assert.deepEqual(ark.bucket, { input: 300, output: 100, cacheRead: 100, cacheWrite: 0, total: 500, messages: 1 })
 })
 
@@ -234,4 +238,67 @@ test('stats service composes WorkBuddy and Qoder alongside DSH', async (t) => {
   assert.equal(result.qoder.available, true)
   assert.equal(result.scan.workbuddy.available, true)
   assert.equal(result.scan.qoder.available, true)
+  // v1.2.0: hourly drill-down on the daily series (local hours). WorkBuddy has
+  // no provider mapping here, so only the mapped Qoder usage reaches `daily`.
+  const todayEntry = result.daily[result.daily.length - 1]
+  assert.equal(todayEntry.day, realToday())
+  assert.equal(todayEntry.hours.length, 24)
+  assert.equal(todayEntry.hours[11], 600, 'Qoder usage lands in its local hour slot')
+  assert.equal(todayEntry.hours.reduce((sum, value) => sum + value, 0), 600)
+  assert.equal(todayEntry.providers.commandcode.hours[11], 600)
+})
+
+test('daily hours combine mapped WorkBuddy and Qoder groups by local hour', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-home-'))
+  const workbuddy = await mkdtemp(join(tmpdir(), 'tokenlens-wb-hours-'))
+  const qoder = await mkdtemp(join(tmpdir(), 'tokenlens-qd-hours-'))
+  t.after(async () => {
+    await rm(dshHome, { recursive: true, force: true })
+    await rm(workbuddy, { recursive: true, force: true })
+    await rm(qoder, { recursive: true, force: true })
+  })
+  await writeTranscript(workbuddy, 's1', [
+    workbuddyRecord({ time: at(realToday(), 9), model: 'deepseek-v4.1-flash', prompt: 1000, completion: 200, cacheRead: 400, requestId: 'r1' }),
+    workbuddyRecord({ time: at(realToday(), 15), model: 'deepseek-v4.1-flash', prompt: 100, completion: 0, cacheRead: 0, requestId: 'r2' }),
+  ])
+  await writeFile(
+    join(qoder, 'settings.json'),
+    JSON.stringify({ providers: { 'qoder-custom-11111111-1111-1111-1111-111111111111': { baseUrl: 'https://api.commandcode.ai/provider/v1' } } }),
+    'utf8',
+  )
+  await writeTranscript(qoder, 's1', [
+    qoderRecord({
+      time: at(realToday(), 9),
+      model: 'qoder-custom-11111111-1111-1111-1111-111111111111/deepseek/deepseek-v4.1-flash',
+      input: 500,
+      output: 100,
+      cacheRead: 100,
+      messageId: 'msg-1',
+    }),
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: {
+      stats: {
+        ttlMs: 0,
+        harnesses: { dsh: false, zcode: false, opencode: false, workbuddy: true, qoder: true },
+        workbuddy: { root: workbuddy, providerAliases: { workbuddy: 'opencode-go' } },
+        qoder: { home: qoder },
+      },
+    },
+    providerCatalog: async () => ({ commandcode: ['deepseek/deepseek-v4.1-flash'] }),
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  const todayEntry = result.daily[result.daily.length - 1]
+  assert.equal(todayEntry.day, realToday())
+  assert.equal(todayEntry.hours.length, 24)
+  // 09:00: WorkBuddy 1200 (mapped to opencode-go) + Qoder 600 (commandcode).
+  assert.equal(todayEntry.hours[9], 1800)
+  assert.equal(todayEntry.hours[15], 100, 'WorkBuddy 15:00 usage is its own slot')
+  assert.equal(todayEntry.hours.reduce((sum, value) => sum + value, 0), todayEntry.total.total)
+  assert.deepEqual(todayEntry.providers['opencode-go'].hours.slice(0, 9), new Array(9).fill(0))
+  assert.equal(todayEntry.providers['opencode-go'].hours[9], 1200)
+  assert.equal(todayEntry.providers['opencode-go'].hours[15], 100)
+  assert.equal(todayEntry.providers.commandcode.hours[9], 600)
 })

@@ -208,6 +208,12 @@ window.__ModuleLoader__.load({
       statsChartPeak: '峰值 {value}（{day}）',
       statsChartBarTitle: '{date}: {tokens}',
       statsChartReadout: '{date} · {value}（{share}%）',
+      statsChartBack: '← 返回日趋势',
+      statsChartBackHint: '返回每日趋势图',
+      statsChartHourTitle: '按小时 · {date}',
+      statsChartHourBarTitle: '{date} {hour} · {tokens}',
+      statsChartHourEmpty: '该日没有小时级数据',
+      statsWindowLabel: '明细统计窗口',
       statsByHarness: '按 Harness',
       statsHarnessUnavailable: '不可用',
       statsHarnessRetryHint: '检查本机 Harness 数据源后点刷新重试',
@@ -429,6 +435,12 @@ window.__ModuleLoader__.load({
       statsChartPeak: 'Peak {value} ({day})',
       statsChartBarTitle: '{date}: {tokens}',
       statsChartReadout: '{date} · {value} ({share}%)',
+      statsChartBack: '← Back to daily',
+      statsChartBackHint: 'Back to the daily trend chart',
+      statsChartHourTitle: 'By hour · {date}',
+      statsChartHourBarTitle: '{date} {hour} · {tokens}',
+      statsChartHourEmpty: 'No hourly data for this day',
+      statsWindowLabel: 'Details window',
       statsByHarness: 'By harness',
       statsHarnessUnavailable: 'Unavailable',
       statsHarnessRetryHint: 'Check the harness data source, then click Refresh to retry',
@@ -1238,6 +1250,17 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * The local 0..23 hour histogram of one daily entry (v1.2.0), or null when
+     * the wire omits it (old Hosts). Anything but a length-24 array is treated
+     * as unsupported; a non-finite / negative slot degrades to 0 so hostile data
+     * can never poison the chart.
+     */
+    function normalizeHourHistogram(raw) {
+      if (!Array.isArray(raw) || raw.length !== 24) return null
+      return raw.map((value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0))
+    }
+
     /** One provider attribution row (stats v3 aggregates DSH + ZCode per provider). */
     function normalizeProviderRow(entry) {
       const providerId = stringOrEmpty(entry.providerId)
@@ -1358,6 +1381,8 @@ window.__ModuleLoader__.load({
           : []
       // v0.24.0: the Host reports a per-day token series (ascending, <=120 days)
       // for the chart mode. Every field is normalized defensively.
+      // v1.2.0: each day (and each provider split of that day) may also carry
+      // the local 0..23 hour histogram used by the chart drill-down.
       const daily = Array.isArray(raw.daily)
         ? raw.daily
             .filter((entry) => entry !== null && typeof entry === 'object')
@@ -1369,10 +1394,18 @@ window.__ModuleLoader__.load({
               const dailyProviders = {}
               for (const [providerId, bucketRaw] of Object.entries(providerRaw)) {
                 if (providerId === '' || bucketRaw === null || typeof bucketRaw !== 'object') continue
-                dailyProviders[providerId] = normalizeBucket(bucketRaw)
+                dailyProviders[providerId] = {
+                  ...normalizeBucket(bucketRaw),
+                  hours: normalizeHourHistogram(bucketRaw.hours),
+                }
               }
               const day = stringOrEmpty(entry.day).trim()
-              return { day, total: normalizeOptionalBucket(entry.total), providers: dailyProviders }
+              return {
+                day,
+                total: normalizeOptionalBucket(entry.total),
+                hours: normalizeHourHistogram(entry.hours),
+                providers: dailyProviders,
+              }
             })
             .filter((entry) => entry.day !== '')
             .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
@@ -1706,6 +1739,12 @@ window.__ModuleLoader__.load({
         // v0.25.0 chart hover: the nearest bar index under the pointer, or null.
         // Reset on mouse leave and whenever the scope/view/provider changes.
         chartHover: null,
+        // v1.2.0 chart drill-down: the clicked day whose 0..23 hour histogram
+        // is charted instead of the daily trend, or null (daily trend).
+        chartDay: null,
+        // v1.2.0 明细 donut window: 'today' | 'last7Days' | 'second' | 'total'.
+        // Presentation state only (never persisted to the plugin settings).
+        detailsWindow: 'total',
         // Provider management page (v0.9.0).
         view: 'usage', // 'usage' | 'management'
         management: defaultManagementState(),
@@ -1787,6 +1826,8 @@ window.__ModuleLoader__.load({
         statsScope: settings.defaultScope,
         showDetails: showDetailsFor(settings.detailsExpanded),
         chartHover: null,
+        chartDay: null,
+        detailsWindow: 'total',
       }
     }
 
@@ -2857,6 +2898,19 @@ window.__ModuleLoader__.load({
 .dsh-tokenlens-chart-summary>span{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .dsh-tokenlens-chart-empty{box-sizing:border-box;min-height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px dashed var(--dsw-alias-border-subtle,rgba(127,127,127,.28));border-radius:8px;padding:10px;text-align:center;min-width:0}
 .dsh-tokenlens-chart-empty-hint{opacity:.8;font-size:11px}
+/* Hourly drill-down of the daily chart (v1.2.0): clickable/focusable day bars,
+   a selected-day ring, and the back + title row above the hour bars. */
+.dsh-tokenlens-chart-bar-wrap-clickable{cursor:pointer}
+.dsh-tokenlens-chart-bar-wrap-clickable:focus-visible{outline:2px solid #2e9e5b;outline-offset:1px;border-radius:3px}
+.dsh-tokenlens-chart-bar-wrap[data-chart-selected=true] .dsh-tokenlens-chart-bar{background:#1d6b3d;box-shadow:0 0 0 1px rgba(64,200,119,.9)}
+.dsh-tokenlens-chart-drilldown{gap:4px}
+.dsh-tokenlens-chart-drill-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.dsh-tokenlens-chart-back{font:inherit;font-size:var(--dsw-alias-font-size-sm,12px);line-height:1.4;padding:1px 8px;border:1px solid var(--dsw-alias-border-subtle,rgba(127,127,127,.24));border-radius:999px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;flex:none}
+.dsh-tokenlens-chart-back:hover{color:var(--dsw-alias-label-secondary)}
+.dsh-tokenlens-chart-back:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-strong,rgba(127,127,127,.5))}
+.dsh-tokenlens-chart-drill-title{color:var(--dsw-alias-label-secondary);font-size:var(--dsw-alias-font-size-sm,12px);line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* 明细 donut window switch (v1.2.0): one pill row under the details title. */
+.dsh-tokenlens-details-window{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
 .dsh-tokenlens-version{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;text-align:right;opacity:.75}
 .dsh-tokenlens-cards{gap:6px;flex-wrap:wrap;display:flex}
 .dsh-tokenlens-cards-caption{color:var(--dsw-alias-label-tertiary);font-size:var(--dsw-alias-font-size-sm,12px);line-height:1.4;margin-bottom:-3px}
@@ -3555,7 +3609,7 @@ window.__ModuleLoader__.load({
             'data-scope': scope,
             'data-active': effective === scope ? 'true' : 'false',
             disabled: stats === null,
-            onClick: () => store.set({ statsScope: scope, chartHover: null }),
+            onClick: () => store.set({ statsScope: scope, chartHover: null, chartDay: null }),
           },
           label,
         )
@@ -3581,7 +3635,7 @@ window.__ModuleLoader__.load({
             'data-active': active === view ? 'true' : 'false',
             'aria-pressed': active === view ? 'true' : 'false',
             onClick: () => {
-              if (active !== view) store.set({ statsView: view, chartHover: null })
+              if (active !== view) store.set({ statsView: view, chartHover: null, chartDay: null })
             },
           },
           Icon(iconName, 12),
@@ -3601,22 +3655,12 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The daily series of the chart (v0.24.0).
+     * The daily provider ids the chart's provider scope matches (v0.24.0).
      *
-     * Provider scope reads the selected provider's daily bucket and limits the
-     * window to the provider's effective day when it is subscription-backed
-     * (fallback: the last 30 days). The all-harness scope uses the day totals of
-     * the last 30 days.
+     * Both the stats row id and the session-selected id are matched, in exact and
+     * canonical form, so `deepseek-official` and `deepseek` find the same bucket.
      */
-    function chartSeriesOf(ctx) {
-      const stats = ctx.stats
-      if (stats === null) return []
-      const daily = stats.daily
-      if (ctx.scope === 'all') {
-        return daily.slice(-30).map((entry) => ({ day: entry.day, total: entry.total?.total ?? 0 }))
-      }
-      // Provider scope: match the daily provider buckets by the stats row id and
-      // the session-selected id (both exact and canonical forms).
+    function chartDailyProviderIds(ctx) {
       const wanted = []
       if (ctx.currentRow !== null && typeof ctx.currentRow.providerId === 'string' && ctx.currentRow.providerId !== '') {
         wanted.push(ctx.currentRow.providerId)
@@ -3624,14 +3668,75 @@ window.__ModuleLoader__.load({
       if (typeof ctx.selectedProviderId === 'string' && ctx.selectedProviderId !== '') {
         wanted.push(ctx.selectedProviderId)
       }
-      const canonicalWanted = new Set(wanted.map((id) => canonicalProviderId(id)))
-      const valueOf = (entry) => {
-        for (const [key, bucket] of Object.entries(entry.providers)) {
-          if (wanted.includes(key) || canonicalWanted.has(canonicalProviderId(key))) return bucket?.total ?? 0
-        }
-        return 0
+      return { wanted, canonicalWanted: new Set(wanted.map((id) => canonicalProviderId(id))) }
+    }
+
+    /** The daily provider bucket of one day in provider scope, or null. */
+    function chartDailyProviderBucket(ctx, entry) {
+      const { wanted, canonicalWanted } = chartDailyProviderIds(ctx)
+      for (const [key, bucket] of Object.entries(entry.providers)) {
+        if (wanted.includes(key) || canonicalWanted.has(canonicalProviderId(key))) return bucket ?? null
       }
-      const series = daily.map((entry) => ({ day: entry.day, total: valueOf(entry) }))
+      return null
+    }
+
+    /** The 24-hour histogram of one chart point, or null when unsupported. */
+    function chartHoursOfPoint(point) {
+      return point !== null && point !== undefined && Array.isArray(point.hours) && point.hours.length === 24
+        ? point.hours
+        : null
+    }
+
+    /** The `HH:00` label of one local hour of the drill-down chart (v1.2.0). */
+    function chartHourLabel(hour) {
+      return `${String(hour).padStart(2, '0')}:00`
+    }
+
+    /** Enter / Space activate a focusable chart bar (v1.2.0). */
+    function isChartActivationKey(event) {
+      const key = typeof event?.key === 'string' ? event.key : ''
+      return key === 'Enter' || key === ' ' || key === 'Spacebar'
+    }
+
+    /**
+     * Toggle the chart drill-down (v1.2.0): clicking a day charts its 0..23 hour
+     * histogram; clicking the SAME day again returns to the daily trend.
+     */
+    function activateChartDay(day) {
+      if (typeof day !== 'string' || day === '') return
+      const next = store.get().chartDay === day ? null : day
+      store.set({ chartDay: next, chartHover: null })
+    }
+
+    /** Leave the hourly drill-down and chart the daily trend again (v1.2.0). */
+    function clearChartDay() {
+      if (store.get().chartDay !== null) store.set({ chartDay: null, chartHover: null })
+    }
+
+    /**
+     * The daily series of the chart (v0.24.0; v1.2.0 adds the day histograms).
+     *
+     * Provider scope reads the selected provider's daily bucket and limits the
+     * window to the provider's effective day when it is subscription-backed
+     * (fallback: the last 30 days). The all-harness scope uses the day totals of
+     * the last 30 days. Every point also carries its 0..23 hour histogram
+     * (`hours`, or null on old Hosts) so the chart can drill into one day.
+     */
+    function chartSeriesOf(ctx) {
+      const stats = ctx.stats
+      if (stats === null) return []
+      const daily = stats.daily
+      if (ctx.scope === 'all') {
+        return daily.slice(-30).map((entry) => ({
+          day: entry.day,
+          total: entry.total?.total ?? 0,
+          hours: entry.hours ?? null,
+        }))
+      }
+      const series = daily.map((entry) => {
+        const bucket = chartDailyProviderBucket(ctx, entry)
+        return { day: entry.day, total: bucket?.total ?? 0, hours: bucket?.hours ?? null }
+      })
       const effectiveDay = ctx.currentRow !== null ? ctx.currentRow.effectiveDay : ''
       if (ctx.subscribed && typeof effectiveDay === 'string' && effectiveDay !== '') {
         return series.filter((point) => point.day >= effectiveDay)
@@ -3710,7 +3815,6 @@ window.__ModuleLoader__.load({
       if (store.get().chartHover !== next) store.set({ chartHover: next })
     }
 
-    /** The pure-CSS daily bar chart: axes + live pointer readout (v0.25.0; no deps). */
     /** The active today bucket of the current stats scope (v0.27.2). */
     function todayBucketOf(ctx) {
       return ctx.providerScoped ? ctx.currentRow?.today ?? null : ctx.stats?.today ?? null
@@ -3727,37 +3831,25 @@ window.__ModuleLoader__.load({
       return ctx.providerScoped ? ctx.currentRow?.last7Days ?? null : ctx.stats?.last7Days ?? null
     }
 
-    function buildDailyChart(state, ctx, t) {
-      const points = chartSeriesOf(ctx)
-      const total = points.reduce((sum, point) => sum + point.total, 0)
-      if (points.length === 0 || total === 0) {
-        return h(
-          'div',
-          { key: 'chart', className: 'dsh-tokenlens-chart', 'data-chart': 'true', 'data-chart-empty-series': 'true' },
-          h(
-            'div',
-            { key: 'empty', className: 'dsh-tokenlens-chart-empty', 'data-chart-empty': 'true' },
-            h('span', { key: 'title', className: 'dsh-tokenlens-hint' }, t('statsChartEmpty')),
-            h(
-              'span',
-              { key: 'hint', className: 'dsh-tokenlens-hint dsh-tokenlens-chart-empty-hint' },
-              t('statsChartEmptyHint'),
-            ),
-          ),
-        )
-      }
+    /**
+     * The shared pure-CSS bar plot of the chart modes (v0.25.0; v1.2.0 reuses
+     * it for the hourly drill-down): Y-axis ticks, gridlines, bars, the X-axis
+     * labels, the crosshair and the live pointer readout. Pure DOM, no deps.
+     *
+     * `spec.bar(point, index, meta)` returns the wrapper element of one bar
+     * (`meta.max` / `meta.hovered` drive its height and highlight),
+     * `spec.xLabel(point, index)` returns `{text, attrs}` for the X axis, and
+     * `spec.readout(hovered, share)` returns the live readout text.
+     */
+    function buildChartPlot(state, points, spec) {
       const max = Math.max(...points.map((point) => point.total), 1)
-      let peak = points[0]
-      for (const point of points) {
-        if (point.total > peak.total) peak = point
-      }
+      const total = points.reduce((sum, point) => sum + point.total, 0)
       const hoverIndex =
         Number.isInteger(state.chartHover) && state.chartHover >= 0 && state.chartHover < points.length
           ? state.chartHover
           : null
       const hovered = hoverIndex === null ? null : points[hoverIndex]
-      const hoverShare =
-        hovered === null || total <= 0 ? 0 : Math.round((hovered.total / total) * 1000) / 10
+      const hoverShare = hovered === null || total <= 0 ? 0 : Math.round((hovered.total / total) * 1000) / 10
       const handleMove = (event) => {
         const index = chartIndexFromEvent(event, points.length)
         if (index !== null) setChartHover(index)
@@ -3783,32 +3875,10 @@ window.__ModuleLoader__.load({
           tick.text,
         ),
       )
-      const bars = points.map((point, index) => {
-        const height = point.total > 0 ? Math.max(2, Math.round((point.total / max) * 1000) / 10) : 0
-        const isHovered = index === hoverIndex
-        return h(
-          'div',
-          {
-            key: point.day,
-            className: 'dsh-tokenlens-chart-bar-wrap',
-            'data-chart-day': point.day,
-            'data-chart-total': String(point.total),
-            'data-chart-hover': isHovered ? 'true' : 'false',
-            title: t('statsChartBarTitle', {
-              date: point.day,
-              tokens: formatTokensPrecise(point.total),
-            }),
-          },
-          h('div', {
-            className: 'dsh-tokenlens-chart-bar',
-            'data-empty': point.total > 0 ? 'false' : 'true',
-            'data-height': String(height),
-            style: { height: `${height}%` },
-          }),
-        )
-      })
+      const bars = points.map((point, index) => spec.bar(point, index, { max, hovered: index === hoverIndex }))
       const xLabels = chartXLabelIndices(points.length).map((index) => {
         const point = points[index]
+        const label = spec.xLabel(point, index)
         const first = index === 0
         const last = index === points.length - 1
         const style = first
@@ -3819,12 +3889,12 @@ window.__ModuleLoader__.load({
         return h(
           'span',
           {
-            key: `x-${point.day}`,
+            key: `x-${index}`,
             className: 'dsh-tokenlens-chart-x-label',
-            'data-chart-axis-day': point.day,
+            ...(label.attrs === null || label.attrs === undefined ? {} : label.attrs),
             style,
           },
-          chartDayLabel(point.day),
+          label.text,
         )
       })
       const crosshair =
@@ -3857,37 +3927,249 @@ window.__ModuleLoader__.load({
                 role: 'status',
                 style: readoutStyle,
               },
-              t('statsChartReadout', {
-                date: hovered.day,
-                value: formatTokensPrecise(hovered.total),
-                share: String(hoverShare),
-              }),
+              spec.readout(hovered, hoverShare),
             )
       return h(
         'div',
-        { key: 'chart', className: 'dsh-tokenlens-chart', 'data-chart': 'true' },
+        { key: 'body', className: 'dsh-tokenlens-chart-body' },
+        h('div', { key: 'y-axis', className: 'dsh-tokenlens-chart-yaxis', 'aria-hidden': 'true' }, yTicks),
         h(
           'div',
-          { key: 'body', className: 'dsh-tokenlens-chart-body' },
-          h('div', { key: 'y-axis', className: 'dsh-tokenlens-chart-yaxis', 'aria-hidden': 'true' }, yTicks),
+          {
+            key: 'plot',
+            className: 'dsh-tokenlens-chart-plot',
+            'data-chart-plot': 'true',
+            onMouseMove: handleMove,
+            onMouseLeave: handleLeave,
+            onPointerMove: handleMove,
+            onPointerLeave: handleLeave,
+          },
+          h('div', { key: 'grid', className: 'dsh-tokenlens-chart-grid', 'aria-hidden': 'true' }, gridLines),
+          h('div', { key: 'bars', className: 'dsh-tokenlens-chart-bars' }, bars),
+          crosshair,
+          readout,
+          h('div', { key: 'xaxis', className: 'dsh-tokenlens-chart-xaxis', 'aria-hidden': 'true' }, xLabels),
+        ),
+      )
+    }
+
+    /**
+     * One bar of the daily trend chart (v0.25.0). A day whose entry carries the
+     * 0..23 hour histogram is ALSO a real button (v1.2.0): focusable, Enter /
+     * Space activate it, `aria-pressed` marks the drilled day. A day without
+     * hours is not drillable and keeps the old non-interactive bar.
+     */
+    function buildDailyChartBar(state, t, point, meta) {
+      const height = point.total > 0 ? Math.max(2, Math.round((point.total / meta.max) * 1000) / 10) : 0
+      const drillable = chartHoursOfPoint(point) !== null
+      const selected = drillable && state.chartDay === point.day
+      const attrs = {
+        key: point.day,
+        className: drillable
+          ? 'dsh-tokenlens-chart-bar-wrap dsh-tokenlens-chart-bar-wrap-clickable'
+          : 'dsh-tokenlens-chart-bar-wrap',
+        'data-chart-day': point.day,
+        'data-chart-total': String(point.total),
+        'data-chart-hover': meta.hovered ? 'true' : 'false',
+        'data-chart-drillable': drillable ? 'true' : 'false',
+        'data-chart-selected': selected ? 'true' : 'false',
+        title: t('statsChartBarTitle', {
+          date: point.day,
+          tokens: formatTokensPrecise(point.total),
+        }),
+      }
+      if (drillable) {
+        attrs.role = 'button'
+        attrs.tabIndex = 0
+        attrs['aria-pressed'] = selected ? 'true' : 'false'
+        attrs['aria-label'] = t('statsChartBarTitle', {
+          date: point.day,
+          tokens: formatTokensPrecise(point.total),
+        })
+        attrs.onClick = () => activateChartDay(point.day)
+        attrs.onKeyDown = (event) => {
+          if (!isChartActivationKey(event)) return
+          if (typeof event?.preventDefault === 'function') event.preventDefault()
+          activateChartDay(point.day)
+        }
+      }
+      return h(
+        'div',
+        attrs,
+        h('div', {
+          className: 'dsh-tokenlens-chart-bar',
+          'data-empty': point.total > 0 ? 'false' : 'true',
+          'data-height': String(height),
+          style: { height: `${height}%` },
+        }),
+      )
+    }
+
+    /**
+     * The drilled day view (v1.2.0): one day's 00:00–23:00 token bars, with a
+     * back button to the daily trend. It reuses the shared plot (axes, pointer
+     * readout, tooltips) and the existing summary formatters.
+     */
+    function buildHourChart(state, point, hours, t) {
+      const dayLabel = chartDayLabel(point.day)
+      const hourPoints = hours.map((value, hour) => ({ hour, total: value }))
+      const total = hourPoints.reduce((sum, hourPoint) => sum + hourPoint.total, 0)
+      const head = h(
+        'div',
+        { key: 'drill-head', className: 'dsh-tokenlens-chart-drill-head', 'data-chart-drill-head': 'true' },
+        h(
+          'button',
+          {
+            key: 'back',
+            type: 'button',
+            className: 'dsh-tokenlens-chart-back',
+            'data-chart-back': point.day,
+            title: t('statsChartBackHint'),
+            'aria-label': t('statsChartBack'),
+            onClick: () => clearChartDay(),
+          },
+          t('statsChartBack'),
+        ),
+        h(
+          'span',
+          { key: 'title', className: 'dsh-tokenlens-chart-drill-title', 'data-chart-hour-title': point.day },
+          t('statsChartHourTitle', { date: point.day }),
+        ),
+      )
+      const containerAttrs = {
+        key: 'chart',
+        className: 'dsh-tokenlens-chart dsh-tokenlens-chart-drilldown',
+        'data-chart': 'true',
+        'data-chart-drilldown': 'true',
+        'data-chart-drill-day': point.day,
+      }
+      if (total <= 0) {
+        // A hosted histogram that is all zeros carries no data: say so instead of
+        // inventing an empty 24-bar chart (old Hosts never get this far: their
+        // bars are not drillable at all).
+        return h(
+          'div',
+          containerAttrs,
+          head,
           h(
             'div',
+            { key: 'empty', className: 'dsh-tokenlens-chart-empty', 'data-chart-hour-empty': 'true' },
+            h('span', { key: 'title', className: 'dsh-tokenlens-hint' }, t('statsChartHourEmpty')),
+          ),
+        )
+      }
+      let peak = hourPoints[0]
+      for (const hourPoint of hourPoints) {
+        if (hourPoint.total > peak.total) peak = hourPoint
+      }
+      const body = buildChartPlot(state, hourPoints, {
+        bar: (hourPoint, index, meta) => {
+          const height = hourPoint.total > 0 ? Math.max(2, Math.round((hourPoint.total / meta.max) * 1000) / 10) : 0
+          return h(
+            'div',
             {
-              key: 'plot',
-              className: 'dsh-tokenlens-chart-plot',
-              'data-chart-plot': 'true',
-              onMouseMove: handleMove,
-              onMouseLeave: handleLeave,
-              onPointerMove: handleMove,
-              onPointerLeave: handleLeave,
+              key: `hour-${hourPoint.hour}`,
+              className: 'dsh-tokenlens-chart-bar-wrap',
+              'data-chart-hour': String(hourPoint.hour),
+              'data-chart-total': String(hourPoint.total),
+              'data-chart-hover': meta.hovered ? 'true' : 'false',
+              title: t('statsChartHourBarTitle', {
+                date: dayLabel,
+                hour: chartHourLabel(hourPoint.hour),
+                tokens: formatTokensPrecise(hourPoint.total),
+              }),
             },
-            h('div', { key: 'grid', className: 'dsh-tokenlens-chart-grid', 'aria-hidden': 'true' }, gridLines),
-            h('div', { key: 'bars', className: 'dsh-tokenlens-chart-bars' }, bars),
-            crosshair,
-            readout,
-            h('div', { key: 'xaxis', className: 'dsh-tokenlens-chart-xaxis', 'aria-hidden': 'true' }, xLabels),
+            h('div', {
+              className: 'dsh-tokenlens-chart-bar',
+              'data-empty': hourPoint.total > 0 ? 'false' : 'true',
+              'data-height': String(height),
+              style: { height: `${height}%` },
+            }),
+          )
+        },
+        xLabel: (hourPoint) => ({
+          text: chartHourLabel(hourPoint.hour),
+          attrs: { 'data-chart-axis-hour': String(hourPoint.hour) },
+        }),
+        readout: (hovered, share) =>
+          t('statsChartReadout', {
+            date: `${dayLabel} ${chartHourLabel(hovered.hour)}`,
+            value: formatTokensPrecise(hovered.total),
+            share: String(share),
+          }),
+      })
+      return h(
+        'div',
+        containerAttrs,
+        head,
+        body,
+        h(
+          'div',
+          { key: 'summary', className: 'dsh-tokenlens-chart-summary' },
+          h(
+            'span',
+            { key: 'total', 'data-chart-summary': 'hour-total' },
+            t('statsChartTotal', { value: formatTokensPrecise(total) }),
+          ),
+          h(
+            'span',
+            { key: 'peak', 'data-chart-summary': 'hour-peak' },
+            t('statsChartPeak', { value: formatTokensPrecise(peak.total), day: chartHourLabel(peak.hour) }),
           ),
         ),
+      )
+    }
+
+    /** The pure-CSS daily bar chart: axes + live pointer readout (v0.25.0; no deps). */
+    function buildDailyChart(state, ctx, t) {
+      const points = chartSeriesOf(ctx)
+      const total = points.reduce((sum, point) => sum + point.total, 0)
+      if (points.length === 0 || total === 0) {
+        return h(
+          'div',
+          { key: 'chart', className: 'dsh-tokenlens-chart', 'data-chart': 'true', 'data-chart-empty-series': 'true' },
+          h(
+            'div',
+            { key: 'empty', className: 'dsh-tokenlens-chart-empty', 'data-chart-empty': 'true' },
+            h('span', { key: 'title', className: 'dsh-tokenlens-hint' }, t('statsChartEmpty')),
+            h(
+              'span',
+              { key: 'hint', className: 'dsh-tokenlens-hint dsh-tokenlens-chart-empty-hint' },
+              t('statsChartEmptyHint'),
+            ),
+          ),
+        )
+      }
+      // v1.2.0: a drilled day replaces the daily trend with its 24-hour
+      // histogram. A stale selection (day gone / no hours) silently falls back to
+      // the daily trend instead of charting a fabricated hour series.
+      const drillPoint =
+        typeof state.chartDay === 'string' && state.chartDay !== ''
+          ? (points.find((point) => point.day === state.chartDay) ?? null)
+          : null
+      const drillHours = drillPoint === null ? null : chartHoursOfPoint(drillPoint)
+      if (drillPoint !== null && drillHours !== null) return buildHourChart(state, drillPoint, drillHours, t)
+      let peak = points[0]
+      for (const point of points) {
+        if (point.total > peak.total) peak = point
+      }
+      const body = buildChartPlot(state, points, {
+        bar: (point, index, meta) => buildDailyChartBar(state, t, point, meta),
+        xLabel: (point) => ({
+          text: chartDayLabel(point.day),
+          attrs: { 'data-chart-axis-day': point.day },
+        }),
+        readout: (hovered, share) =>
+          t('statsChartReadout', {
+            date: hovered.day,
+            value: formatTokensPrecise(hovered.total),
+            share: String(share),
+          }),
+      })
+      return h(
+        'div',
+        { key: 'chart', className: 'dsh-tokenlens-chart', 'data-chart': 'true' },
+        body,
         h(
           'div',
           { key: 'summary', className: 'dsh-tokenlens-chart-summary' },
@@ -4084,6 +4366,83 @@ window.__ModuleLoader__.load({
         return t('statsSinceEffective', { n: Math.floor(ctx.effectiveDays) })
       }
       return t('statsLast30Days')
+    }
+
+    /**
+     * The 明细 donut windows in display order (v1.2.0): 今日 → 最近7天 →
+     * 最近X天/最近30天 → 总计. Old Hosts omit the 7-day / second windows, so their
+     * pills are hidden (never disabled ghosts of a window that cannot exist).
+     */
+    function detailsWindowChoices(ctx, t) {
+      const choices = [{ key: 'today', label: t('statsTodayCol') }]
+      if (ctx.hasWeek) choices.push({ key: 'last7Days', label: t('statsLast7Days') })
+      if (ctx.hasMonth) choices.push({ key: 'second', label: detailsSecondLabel(ctx, t) })
+      choices.push({ key: 'total', label: t('statsAllTimeCol') })
+      return choices
+    }
+
+    /**
+     * The active 明细 donut window (v1.2.0): the stored choice while that window
+     * still exists, else 总计. The state lives in the store next to statsView /
+     * statsScope and is never persisted to the plugin settings.
+     */
+    function detailsWindowOf(state, ctx) {
+      const key = typeof state.detailsWindow === 'string' ? state.detailsWindow : 'total'
+      if (key === 'today') return 'today'
+      if (key === 'last7Days') return ctx.hasWeek ? 'last7Days' : 'total'
+      if (key === 'second') return ctx.hasMonth ? 'second' : 'total'
+      return 'total'
+    }
+
+    /**
+     * The bucket of one 明细 row for a donut window (v1.2.0). Harness/provider
+     * rows carry the four stats windows directly; model rows use the caller's
+     * second-window accessor (`secondModelOf`) for the effective-window column.
+     */
+    function detailsWindowBucketOf(windowKey, buckets, secondBucketOf) {
+      if (buckets === null || buckets === undefined) return null
+      if (windowKey === 'today') return buckets.today ?? null
+      if (windowKey === 'last7Days') return buckets.last7Days ?? null
+      if (windowKey === 'second') {
+        return typeof secondBucketOf === 'function' ? secondBucketOf(buckets) : buckets.last30Days ?? null
+      }
+      return buckets.allTime ?? null
+    }
+
+    /** The token total of one 明细 row for a donut window (v1.2.0). */
+    function detailsWindowTotalOf(windowKey, buckets, secondBucketOf) {
+      const bucket = detailsWindowBucketOf(windowKey, buckets, secondBucketOf)
+      return bucket === null ? 0 : bucket.total ?? 0
+    }
+
+    /** The window pill row under the 明细 donut title (v1.2.0). */
+    function buildDetailsWindowSwitch(state, ctx, t) {
+      const active = detailsWindowOf(state, ctx)
+      const option = (key, label) =>
+        h(
+          'button',
+          {
+            key,
+            type: 'button',
+            className: 'dsh-tokenlens-scope-option',
+            'data-details-window': key,
+            'data-active': active === key ? 'true' : 'false',
+            'aria-pressed': active === key ? 'true' : 'false',
+            onClick: () => {
+              if (active !== key) store.set({ detailsWindow: key })
+            },
+          },
+          label,
+        )
+      return h(
+        'div',
+        { key: 'details-window', className: 'dsh-tokenlens-details-window', 'data-details-window-switch': 'true' },
+        h(
+          'div',
+          { key: 'scope', className: 'dsh-tokenlens-scope', role: 'group', 'aria-label': t('statsWindowLabel') },
+          detailsWindowChoices(ctx, t).map((choice) => option(choice.key, choice.label)),
+        ),
+      )
     }
 
     /**
@@ -4758,10 +5117,18 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** The 明细 column in chart mode: donut share charts + ranked legends. */
+    /**
+     * The 明细 column in chart mode: donut share charts + ranked legends.
+     *
+     * v1.2.0: a 今日 / 最近7天 / 最近X天 / 总计 window switch under the title picks
+     * which stats window the three donuts aggregate (default 总计). The pills of
+     * windows an old Host does not report are hidden; the state lives in the store
+     * (never persisted to the plugin settings).
+     */
     function buildStatsDetailsCharts(state, ctx, t) {
-      const { stats, hasMonth } = ctx
+      const { stats } = ctx
       if (stats === null) return null
+      const windowKey = detailsWindowOf(state, ctx)
       const children = [
         h(
           'div',
@@ -4773,17 +5140,18 @@ window.__ModuleLoader__.load({
             h('span', { key: 'label' }, t('statsDetailsTitle')),
           ),
         ),
+        buildDetailsWindowSwitch(state, ctx, t),
       ]
+      const groups = []
       const harnessRows = scopedHarnessRows(ctx).map((row) => ({
         label: row.label,
-        value: ctx.secondBucketOf(row.buckets)?.total ?? 0,
+        value: detailsWindowTotalOf(windowKey, row.buckets, ctx.secondBucketOf),
       }))
-      const groups = []
       const harnessChart = buildBreakdownDonutGroup('harness-chart', t('statsByHarness'), 'list', harnessRows, t)
       if (harnessChart !== null) groups.push(harnessChart)
       const providerRows = stats.providers.map((provider) => ({
         label: provider.label,
-        value: ctx.secondBucketOf(provider)?.total ?? 0,
+        value: detailsWindowTotalOf(windowKey, provider, ctx.secondBucketOf),
       }))
       const providerChart = buildBreakdownDonutGroup('provider-chart', t('statsByProvider'), 'server', providerRows, t)
       if (providerChart !== null) groups.push(providerChart)
@@ -4792,18 +5160,25 @@ window.__ModuleLoader__.load({
       // models from other providers silently disappear from the donut (v0.27.1).
       const modelRows = stats.models.map((model) => ({
         label: model.modelId,
-        value: ctx.secondModelOf(model)?.total ?? 0,
+        value: detailsWindowTotalOf(windowKey, model, ctx.secondModelOf),
       }))
       const modelChart = buildBreakdownDonutGroup('model-chart', t('statsTopModels'), 'cube', modelRows, t)
       if (modelChart !== null) groups.push(modelChart)
       if (groups.length > 0) {
         children.push(h('div', { key: 'charts', className: 'dsh-tokenlens-details-charts-grid' }, groups))
-      }
-      if (children.length === 1) {
+      } else {
+        // An all-zero window renders no donut at all: keep the readable hint.
         children.push(h('div', { key: 'empty', className: 'dsh-tokenlens-hint' }, t('statsEmpty')))
       }
-      void hasMonth
-      return h('div', { key: 'details', className: 'dsh-tokenlens-section dsh-tokenlens-details' }, children)
+      return h(
+        'div',
+        {
+          key: 'details',
+          className: 'dsh-tokenlens-section dsh-tokenlens-details',
+          'data-details-window': windowKey,
+        },
+        children,
+      )
     }
 
     function buildStatsDetails(state, ctx, t) {

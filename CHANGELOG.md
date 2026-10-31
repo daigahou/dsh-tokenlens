@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)：修复 = PATCH，新功能 = MINOR，不兼容变更 = MAJOR。发布时同步更新 `package.json` 的 `version`、`index.js` 的 `PLUGIN_VERSION` 与本文件（`node scripts/bump-version.mjs <version> "<note>"`）；已发布的条目保持原样。
 
+## 1.2.0 — 2026-10-31
+
+- feat(chart): 图表模式点击某一天的柱子可下钻查看**当天 24 小时**的 Token 消耗棒状图（横轴 00:00–23:00，悬浮显示小时与占比，回车/空格同样可操作，返回或再次点击回到日趋势）
+- feat(chart): 小时数据覆盖全部 5 个本机 harness（DSH、ZCode、OpenCode CLI、WorkBuddy、Qoder）；无小时数据的旧日期不可下钻，不伪造全零序列
+- feat(chart): 图表模式「明细」的三张环形图（按 Harness / 按供应商 / Top 模型）新增 **今日 / 最近7天 / 最近X天（或最近30天）/ 总计** 窗口切换，默认总计；切换 scope 或数据/图表视图时保持，缺失窗口自动隐藏
+- feat(wire): `stats.daily[]` 新增可选 `hours`（24 个本地小时 Token 整数）与 `providers[pid].hours`（v1.2.0 协议，已在 PROTOCOL 中写明）
+- 测试：250 个自动化用例（新增 13 个：小时聚合、外部 harness 小时分组、下钻交互与窗口切换的前后端回归）
+
 ## 1.1.0 — 2026-10-30
 
 - feat(providers): 接入 Open Design（OpenDesign）只读额度查询——Design Plan 的 5 小时 / 7 天窗口已用百分比与重置时间，以及独立的钱包 USD 余额

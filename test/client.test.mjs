@@ -6844,3 +6844,542 @@ test('the sidebar workspace-token decorator is guarded and source-marked', () =>
   assert.match(source, /\.dsh-tokenlens-workspace-hover-label\{opacity:\.7;margin-right:3px\}/, 'the hover labels are muted')
   assert.match(source, /one odd hover card must not stop the others/, 'hover decorator failures are isolated')
 })
+
+// ---------------------------------------------------------------------------
+// Chart drill-down: click a day bar → that day's 0..23 hour bars (v0.31.0).
+// ---------------------------------------------------------------------------
+
+/**
+ * A daily series whose entries ALSO carry the Host's 0..23 hour histograms.
+ * The whole day lands on `allPeakHour`, the whole provider slice on
+ * `providerPeakHour`, so the two scopes read visibly different bars while both
+ * histograms sum to their buckets (like the real wire contract).
+ */
+function hourlyChartStats(options = {}) {
+  const count = options.days ?? 30
+  const allPeakHour = options.allPeakHour ?? 14
+  const providerPeakHour = options.providerPeakHour ?? 9
+  const daily = dayList(count).map((day, index) => {
+    const entry = dailyEntry(day, index)
+    const dayHours = Array.from({ length: 24 }, () => 0)
+    dayHours[allPeakHour] = 1000000 * (index + 1)
+    entry.hours = dayHours
+    const providerHours = Array.from({ length: 24 }, () => 0)
+    providerHours[providerPeakHour] = 500000 * (index + 1)
+    entry.providers['opencode-go'].hours = providerHours
+    return entry
+  })
+  return statsFixture({
+    providers: [
+      {
+        providerId: 'opencode-go',
+        label: 'OpenCode',
+        today: bucket({ total: 15000000 }),
+        last30Days: bucket({ total: 465000000 }),
+        allTime: bucket({ total: 465000000 }),
+        harnesses: {},
+      },
+    ],
+    daily,
+    models: [],
+    zcode: null,
+  })
+}
+
+/** The 24-hour drill-down container, or undefined when the daily trend renders. */
+function hourDrilldownOf(tree) {
+  return findElement(tree, (element) => element.props?.['data-chart-drilldown'] === 'true')
+}
+
+/** Every hour bar of the drilled chart, in 0..23 order. */
+function hourBarsOf(tree) {
+  return findAll(tree, (element) => element.props?.['data-chart-hour'] !== undefined)
+}
+
+/** The back button of the hourly drill-down, or undefined. */
+function hourBackButtonOf(tree) {
+  return findElement(tree, (element) => element.props?.['data-chart-back'] !== undefined)
+}
+
+/** The texts of the 明细 donut window pills, in display order. */
+function detailsWindowPillTexts(tree) {
+  return findAll(
+    tree,
+    (element) =>
+      element.props?.className === 'dsh-tokenlens-scope-option' &&
+      element.props?.['data-details-window'] !== undefined,
+  ).map((pill) => textOf(pill))
+}
+
+/** One 明细 donut window pill (`today` / `last7Days` / `second` / `total`). */
+function detailsWindowPillOf(tree, key) {
+  return findElement(
+    tree,
+    (element) =>
+      element.props?.className === 'dsh-tokenlens-scope-option' &&
+      element.props['data-details-window'] === key,
+  )
+}
+
+/** The centre total text of one donut group, or undefined when it is omitted. */
+function donutTotalOf(tree, key) {
+  const group = donutGroupOf(tree, key)
+  if (group === undefined) return undefined
+  const centre = findElement(group, (element) => element.props?.['data-donut-total'] !== undefined)
+  return centre === undefined ? undefined : textOf(centre)
+}
+
+test('clicking a day bar drills into the 24-hour chart and back restores the daily trend', async () => {
+  const days = dayList(30)
+  const plugin = loadChartPlugin(hourlyChartStats())
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    assert.equal(statsViewOptionOf(tree, 'chart').props['data-active'], 'true', 'chart mode is the default')
+    // The all-harness scope charts the day totals (the provider slice is charted
+    // by the dedicated provider-scope test below).
+    scopeTabOf(tree, 'all').props.onClick()
+    tree = renderDialog(plugin)
+    let bars = chartBarsOf(tree)
+    assert.equal(bars.length, 30, 'the daily trend renders before any drill-down')
+    assert.equal(bars[29].props['data-chart-drillable'], 'true', 'a day with hours is drillable')
+    assert.equal(bars[29].props.role, 'button', 'a drillable day bar is a real button')
+    assert.equal(bars[29].props.tabIndex, 0, 'a drillable day bar is focusable')
+    assert.equal(bars[29].props['aria-pressed'], 'false', 'no day is selected yet')
+    assert.equal(hourDrilldownOf(tree), undefined)
+
+    // Click the last day: 2026-10-25 with 30M tokens, all of it at 14:00.
+    bars[29].props.onClick()
+    tree = renderDialog(plugin)
+    const drill = hourDrilldownOf(tree)
+    assert.ok(drill, 'the chart switches to the hourly view')
+    assert.equal(drill.props['data-chart-drill-day'], days[29])
+    assert.equal(chartBarsOf(tree).length, 0, 'the daily trend is replaced while drilled')
+    const hourBars = hourBarsOf(tree)
+    assert.equal(hourBars.length, 24, '24 hour bars render (00:00 .. 23:00)')
+    assert.deepEqual(
+      hourBars.map((bar) => bar.props['data-chart-hour']),
+      Array.from({ length: 24 }, (_, hour) => String(hour)),
+      'the bars are the local hours in order',
+    )
+    assert.equal(hourBars[14].props['data-chart-total'], '30000000', 'the peak hour carries the day tokens')
+    assert.equal(hourBars[13].props['data-chart-total'], '0')
+    assert.equal(hourBars[14].props.title, '10-25 14:00 · 30.000M', 'MM-DD HH:00 token tooltip')
+    // The hour axis and the Y axis reuse the daily chart implementation.
+    assert.deepEqual(
+      findAll(tree, (element) => element.props?.['data-chart-axis-hour'] !== undefined).map((node) => textOf(node)),
+      ['00:00', '05:00', '10:00', '15:00', '20:00', '23:00'],
+      'the X axis labels hours as HH:00',
+    )
+    assert.deepEqual(
+      findAll(tree, (element) => element.props?.['data-chart-tick'] !== undefined).map((node) => textOf(node)),
+      ['30.000M', '22.500M', '15.000M', '7.500M', '0'],
+      'the shared Y axis ticks scale to the day maximum',
+    )
+    // The header names the drilled day and offers the back button.
+    const title = findElement(tree, (element) => element.props?.['data-chart-hour-title'] !== undefined)
+    assert.ok(title, 'the drilled view names its day')
+    assert.match(textOf(title), /按小时 · 2026-10-25/, 'the header states the drilled date')
+    assert.ok(hourBackButtonOf(tree), 'a back button is offered')
+    // Summary: the day total and its peak hour (existing formatters).
+    assert.match(textOf(chartSummaryOf(tree, 'hour-total')), /合计 30\.000M/)
+    assert.match(textOf(chartSummaryOf(tree, 'hour-peak')), /峰值 30\.000M（14:00）/)
+    // Hover still works: the readout prefixes the drilled day with the hour.
+    movePointerTo(chartPlotOf(tree), 14, 24)
+    tree = renderDialog(plugin)
+    const readout = chartReadoutOf(tree)
+    assert.ok(readout, 'the hour chart keeps the live pointer readout')
+    assert.equal(textOf(readout), '10-25 14:00 · 30.000M（100%）')
+    // Moving to an empty hour reports the drilled day + that hour too.
+    movePointerTo(chartPlotOf(tree), 7, 24)
+    tree = renderDialog(plugin)
+    assert.match(textOf(chartReadoutOf(tree)), /^10-25 07:00 · 0（0%）$/)
+
+    // Back restores the daily trend and clears the selection.
+    hourBackButtonOf(tree).props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree), undefined, 'back returns to the daily trend')
+    assert.equal(chartBarsOf(tree).length, 30, 'the daily bars are back')
+    assert.ok(findElement(tree, (element) => element.props?.['data-chart'] === 'true'))
+    assert.ok(
+      chartBarsOf(tree).every((bar) => bar.props['aria-pressed'] === 'false'),
+      'no day stays selected after going back',
+    )
+
+    // Clicking the SAME day twice toggles back to the daily trend as well (the
+    // captured handler is live: the second call sees the stored selection).
+    bars = chartBarsOf(tree)
+    bars[29].props.onClick()
+    bars[29].props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree), undefined, 'clicking the same day again returns to the daily trend')
+    assert.equal(chartBarsOf(tree).length, 30)
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('the day bars are keyboard accessible and Enter / Space drill in', async () => {
+  const days = dayList(30)
+  const plugin = loadChartPlugin(hourlyChartStats())
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    let bars = chartBarsOf(tree)
+    bars[10].props.onKeyDown({ key: 'Enter' })
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree)?.props['data-chart-drill-day'], days[10], 'Enter drills into the focused day')
+    assert.equal(hourBarsOf(tree).length, 24)
+
+    hourBackButtonOf(tree).props.onClick()
+    tree = renderDialog(plugin)
+    bars = chartBarsOf(tree)
+    bars[11].props.onKeyDown({ key: ' ' })
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree)?.props['data-chart-drill-day'], days[11], 'Space drills into the focused day')
+
+    // Any other key must not drill in.
+    hourBackButtonOf(tree).props.onClick()
+    tree = renderDialog(plugin)
+    bars = chartBarsOf(tree)
+    bars[12].props.onKeyDown({ key: 'Tab' })
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree), undefined, 'only Enter / Space activate a day bar')
+
+    // The en locale renders the localized header / back label.
+    const enT = translatorOf(plugin.dictionaries['dsh-tokenlens'].en)
+    bars = chartBarsOf(tree)
+    bars[20].props.onClick()
+    const enTree = dialogOf(plugin).component({ sessionId: 'session-1', t: enT })
+    assert.match(textOf(findElement(enTree, (element) => element.props?.['data-chart-hour-title'] !== undefined)), /By hour · /)
+    assert.match(textOf(hourBackButtonOf(enTree)), /Back to daily/)
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('old payloads without hours stay non-interactive and hostile histograms degrade safely', async () => {
+  // (a) A pre-v1.2.0 payload: the chart renders exactly as before, no buttons.
+  const legacyPlugin = loadChartPlugin(chartStats30())
+  try {
+    let tree = await settleDialog(legacyPlugin, 'opencode-go')
+    const bars = chartBarsOf(tree)
+    assert.equal(bars.length, 30, 'the legacy daily chart still renders')
+    for (const bar of bars) {
+      assert.equal(bar.props['data-chart-drillable'], 'false', 'a day without hours is not drillable')
+      assert.equal(bar.props.role, undefined, 'no button role without hour data')
+      assert.equal(bar.props.tabIndex, undefined, 'no focus stop without hour data')
+      assert.equal(bar.props['aria-pressed'], undefined)
+      assert.equal(bar.props.onClick, undefined, 'no click handler is invented')
+    }
+    assert.equal(hourDrilldownOf(tree), undefined)
+    assert.equal(
+      findAll(tree, (element) => element.props?.['data-chart-axis-hour'] !== undefined).length,
+      0,
+      'no hour axis is invented',
+    )
+  } finally {
+    legacyPlugin.dispose()
+  }
+
+  // (b) Hostile / partial histograms: wrong length is unsupported, non-finite
+  // and negative slots degrade to 0, and a provider split may lack its own hours.
+  const stats = hourlyChartStats({ days: 3 })
+  stats.daily[0].hours = [0, 1, 2] // wrong length → not drillable
+  stats.daily[1].hours = Array.from({ length: 24 }, (_, hour) => {
+    if (hour === 5) return 'oops'
+    if (hour === 6) return Infinity
+    if (hour === 7) return -3
+    return hour * 1000
+  })
+  stats.daily[1].providers['opencode-go'].hours = Array.from({ length: 24 }, (_, hour) =>
+    hour === 5 ? 'x' : hour * 100,
+  )
+  delete stats.daily[0].providers['opencode-go'].hours // provider split without hours
+  delete stats.daily[2].providers['opencode-go'].hours // provider split without hours
+  const plugin = loadChartPlugin(stats)
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    let bars = chartBarsOf(tree)
+    assert.equal(bars[0].props['data-chart-drillable'], 'false', 'a wrong-length histogram is not drillable')
+    assert.equal(bars[1].props['data-chart-drillable'], 'true', 'a length-24 histogram is drillable')
+    assert.equal(bars[2].props['data-chart-drillable'], 'false', 'the provider scope needs the provider histogram')
+
+    // Provider scope reads the provider histogram: hour 5 (0) has no data, while
+    // the day histogram would put all of it on hour 14.
+    bars[1].props.onClick()
+    tree = renderDialog(plugin)
+    let hours = hourBarsOf(tree)
+    assert.equal(hours.length, 24)
+    assert.equal(hours[5].props['data-chart-total'], '0', 'a non-finite slot degrades to 0')
+    assert.equal(hours[14].props['data-chart-total'], '1400')
+    hourBackButtonOf(tree).props.onClick()
+    tree = renderDialog(plugin)
+
+    // All-harness scope charts the day histogram: hostile slots become 0 too.
+    scopeTabOf(tree, 'all').props.onClick()
+    tree = renderDialog(plugin)
+    bars = chartBarsOf(tree)
+    assert.equal(bars[0].props['data-chart-drillable'], 'false', 'a wrong-length day histogram is not drillable')
+    assert.equal(bars[2].props['data-chart-drillable'], 'true', 'a provider-split gap does not hide the day histogram')
+    bars[1].props.onClick()
+    tree = renderDialog(plugin)
+    hours = hourBarsOf(tree)
+    assert.equal(hours[5].props['data-chart-total'], '0', 'a string slot degrades to 0')
+    assert.equal(hours[6].props['data-chart-total'], '0', 'Infinity degrades to 0')
+    assert.equal(hours[7].props['data-chart-total'], '0', 'a negative slot degrades to 0')
+    assert.equal(hours[8].props['data-chart-total'], '8000', 'finite slots are preserved')
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('a drilled day whose histogram is all zeros shows the hour empty hint', async () => {
+  const stats = hourlyChartStats({ days: 3 })
+  // A Host inconsistency: a non-zero daily total with an all-zero histogram.
+  stats.daily[2].hours = Array.from({ length: 24 }, () => 0)
+  const plugin = loadChartPlugin(stats)
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    scopeTabOf(tree, 'all').props.onClick()
+    tree = renderDialog(plugin)
+    const bars = chartBarsOf(tree)
+    bars[2].props.onClick()
+    tree = renderDialog(plugin)
+    assert.ok(hourDrilldownOf(tree), 'the drilled header still renders')
+    assert.equal(hourBarsOf(tree).length, 0, 'no fake 24 zero bars are drawn')
+    const empty = findElement(tree, (element) => element.props?.['data-chart-hour-empty'] === 'true')
+    assert.ok(empty, 'the hour empty state renders')
+    assert.match(textOf(empty), /该日没有小时级数据/, 'the hour empty state explains the missing data')
+    // The back button works from the empty hour view too.
+    hourBackButtonOf(tree).props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree), undefined)
+    assert.equal(chartBarsOf(tree).length, 3)
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('provider scope drills with the provider histogram, all-harness scope with the day histogram', async () => {
+  const plugin = loadChartPlugin(hourlyChartStats())
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    // Provider scope (default): the day's 15M is split over the provider's hours
+    // (peak 09:00), not the day histogram (peak 14:00).
+    let bars = chartBarsOf(tree)
+    bars[29].props.onClick()
+    tree = renderDialog(plugin)
+    let hours = hourBarsOf(tree)
+    assert.equal(hours[9].props['data-chart-total'], '15000000', 'provider scope uses providers[pid].hours')
+    assert.equal(hours[14].props['data-chart-total'], '0', 'the day histogram is not used in provider scope')
+    assert.match(textOf(chartSummaryOf(tree, 'hour-total')), /合计 15\.000M/)
+
+    // Switching the scope while drilled returns to the daily trend (selection reset).
+    scopeTabOf(tree, 'all').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(hourDrilldownOf(tree), undefined, 'a scope switch clears the drill-down')
+    bars = chartBarsOf(tree)
+    assert.equal(bars[29].props['data-chart-total'], '30000000', 'all-harness scope reads the day totals')
+
+    // All-harness scope: the day histogram (peak 14:00) is charted.
+    bars[29].props.onClick()
+    tree = renderDialog(plugin)
+    hours = hourBarsOf(tree)
+    assert.equal(hours[14].props['data-chart-total'], '30000000', 'all-harness scope uses daily[].hours')
+    assert.equal(hours[9].props['data-chart-total'], '0', 'the provider histogram is not used in all scope')
+    assert.match(textOf(chartSummaryOf(tree, 'hour-total')), /合计 30\.000M/)
+  } finally {
+    plugin.dispose()
+  }
+})
+
+// ---------------------------------------------------------------------------
+// 明细 donut window switch: 今日 / 最近7天 / 最近X天 / 总计 (v0.31.0).
+// ---------------------------------------------------------------------------
+
+test('the 明细 donut window switch re-aggregates 今日 / 最近7天 / 最近X天 / 总计', async () => {
+  const plugin = loadChartPlugin(weeklyStatsFixture())
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    // The pills mirror the data-mode columns; 总计 is the default.
+    assert.deepEqual(
+      detailsWindowPillTexts(tree),
+      ['今日', '最近7天', '最近30天', '总计'],
+      'the four windows render in column order',
+    )
+    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'true', '总计 is the default window')
+    assert.ok(
+      findElement(tree, (element) => element.props?.['data-details-window-switch'] === 'true'),
+      'the switch row sits under the details title',
+    )
+    assert.equal(detailsWindowPillOf(tree, 'total').props['aria-pressed'], 'true')
+    assert.equal(detailsWindowPillOf(tree, 'today').props['aria-pressed'], 'false')
+    assert.equal(
+      findElement(
+        tree,
+        (element) =>
+          (element.props?.className ?? '').includes('dsh-tokenlens-details') &&
+          element.props?.['data-details-window'] !== undefined,
+      ).props['data-details-window'],
+      'total',
+      'the rendered details card names its active window',
+    )
+
+    // 总计: harness / provider / model donuts aggregate allTime.
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '500.000M')
+    assert.deepEqual(legendCellsOf(donutGroupOf(tree, 'harness-chart'), 'dsh-tokenlens-donut-legend-value'), [
+      '400.000M',
+      '100.000M',
+    ])
+    assert.deepEqual(
+      findAll(
+        donutGroupOf(tree, 'harness-chart'),
+        (element) => element.props?.['data-donut-segment'] !== undefined,
+      ).map((segment) => segment.props['data-donut-value']),
+      ['400000000', '100000000'],
+      'the segment values are the all-time buckets',
+    )
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '800.000M')
+    assert.equal(donutTotalOf(tree, 'model-chart'), '250.000M')
+
+    // 今日.
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'today').props['data-active'], 'true')
+    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'false')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '10.000M', 'the harness donut reads the 今日 buckets')
+    assert.deepEqual(
+      findAll(
+        donutGroupOf(tree, 'harness-chart'),
+        (element) => element.props?.['data-donut-segment'] !== undefined,
+      ).map((segment) => segment.props['data-donut-value']),
+      ['6000000', '4000000'],
+      'the segment values switch to the 今日 buckets',
+    )
+    assert.deepEqual(legendCellsOf(donutGroupOf(tree, 'harness-chart'), 'dsh-tokenlens-donut-legend-percent'), [
+      '60.0%',
+      '40.0%',
+    ])
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '15.000M')
+    assert.equal(donutTotalOf(tree, 'model-chart'), '3.000M')
+
+    // 最近7天.
+    detailsWindowPillOf(tree, 'last7Days').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'last7Days').props['data-active'], 'true')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '70.000M')
+    assert.deepEqual(legendCellsOf(donutGroupOf(tree, 'harness-chart'), 'dsh-tokenlens-donut-legend-value'), [
+      '40.000M',
+      '30.000M',
+    ])
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '105.000M')
+    assert.equal(donutTotalOf(tree, 'model-chart'), '20.000M')
+
+    // 最近X天 / 最近30天.
+    detailsWindowPillOf(tree, 'second').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'true')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '200.000M')
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '320.000M')
+    assert.equal(donutTotalOf(tree, 'model-chart'), '90.000M')
+
+    // Switching the stats scope keeps a still-valid window selection.
+    scopeTabOf(tree, 'all').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'true', 'the second window survives a scope switch')
+    assert.equal(donutTotalOf(tree, 'harness-chart'), '200.000M')
+
+    // 数据 / 图表 round-trip keeps the selection too.
+    tree = switchToDataView(plugin, tree)
+    assert.equal(
+      findElement(tree, (element) => element.props?.['data-details-window-switch'] === 'true'),
+      undefined,
+      'the donut window switch is chart-mode only',
+    )
+    statsViewOptionOf(tree, 'chart').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'true', 'the window survives a data/chart round-trip')
+
+    // Reopening the dialog resets to 总计 (presentation state, not a setting).
+    findElement(tree, (element) => element.props?.className === 'dsh-tokenlens-close').props.onClick()
+    clickChip(plugin, 'opencode-go')
+    await settle()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'true', 'a reopen starts at 总计')
+  } finally {
+    plugin.dispose()
+  }
+})
+
+test('the 明细 window switch renders the dynamic second-window label and hides absent windows', async () => {
+  // A subscribed provider labels the second window 最近{n}天.
+  const subscribedPlugin = loadChartPlugin(effectiveWindowStats())
+  try {
+    const tree = await settleDialog(subscribedPlugin, 'opencode-go')
+    assert.deepEqual(detailsWindowPillTexts(tree), ['今日', '最近12天', '总计'], 'no 7-day pill on a Host without it')
+    assert.equal(detailsWindowPillOf(tree, 'last7Days'), undefined)
+    assert.equal(detailsWindowPillOf(tree, 'second').props['data-active'], 'false')
+    detailsWindowPillOf(tree, 'second').props.onClick()
+    const secondTree = renderDialog(subscribedPlugin)
+    assert.equal(detailsWindowPillOf(secondTree, 'second').props['data-active'], 'true')
+    // Provider-scope harness donut aggregates the effective window (DSH only).
+    assert.equal(donutTotalOf(secondTree, 'harness-chart'), '100.000M', 'the second pill reads sinceEffective')
+  } finally {
+    subscribedPlugin.dispose()
+  }
+
+  // An old Host without last7Days / last30Days hides both optional pills.
+  const oldStats = statsFixture({
+    last30Days: null,
+    providers: [
+      {
+        providerId: 'opencode-go',
+        label: 'OpenCode',
+        today: bucket({ total: 1000000 }),
+        last30Days: null,
+        allTime: bucket({ total: 5000000 }),
+        harnesses: {},
+      },
+    ],
+    models: [],
+    zcode: null,
+    daily: [],
+  })
+  const oldPlugin = loadChartPlugin(oldStats)
+  try {
+    const tree = await settleDialog(oldPlugin, 'opencode-go')
+    assert.deepEqual(detailsWindowPillTexts(tree), ['今日', '总计'], 'only the windows the Host reports are offered')
+    assert.equal(detailsWindowPillOf(tree, 'last7Days'), undefined)
+    assert.equal(detailsWindowPillOf(tree, 'second'), undefined)
+    assert.equal(detailsWindowPillOf(tree, 'total').props['data-active'], 'true', '总计 stays the default')
+    assert.equal(donutTotalOf(tree, 'provider-chart'), '5.000M', 'the default total reads allTime')
+    // A stored choice that vanishes falls back to 总计 instead of breaking.
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    const todayTree = renderDialog(oldPlugin)
+    assert.equal(donutTotalOf(todayTree, 'provider-chart'), '1.000M')
+  } finally {
+    oldPlugin.dispose()
+  }
+})
+
+test('an all-zero donut window keeps the readable empty hint', async () => {
+  const plugin = loadChartPlugin(donutStatsFixture())
+  try {
+    let tree = await settleDialog(plugin, 'opencode-go')
+    assert.equal(donutGroupsOf(tree).length, 3, '总计 renders all three donuts')
+    detailsWindowPillOf(tree, 'today').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(detailsWindowPillOf(tree, 'today').props['data-active'], 'true')
+    assert.equal(donutGroupsOf(tree).length, 0, 'an all-zero window renders no donut at all')
+    assert.match(textOf(tree), /还没有 Token 使用记录|暂无/, 'the empty hint stays readable')
+    // The en locale labels the four pills.
+    const enT = translatorOf(plugin.dictionaries['dsh-tokenlens'].en)
+    const enTree = dialogOf(plugin).component({ sessionId: 'session-1', t: enT })
+    assert.deepEqual(detailsWindowPillTexts(enTree), ['Today', 'Last 30 days', 'All time'])
+    // Back to a non-empty window restores the donuts.
+    detailsWindowPillOf(tree, 'total').props.onClick()
+    tree = renderDialog(plugin)
+    assert.equal(donutGroupsOf(tree).length, 3)
+  } finally {
+    plugin.dispose()
+  }
+})

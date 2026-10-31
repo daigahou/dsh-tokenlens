@@ -180,8 +180,18 @@ with `[path]`.
       { "key": "opencode-go/deepseek-v4.1-flash", "providerId": "opencode-go",
         "modelId": "deepseek-v4.1-flash",
         "today": { "total": …, "messages": … },
+        "last7Days": { "total": …, "messages": … },
         "last30Days": { "total": …, "messages": … },
         "allTime": { "total": …, "messages": … } }
+    ],
+    "daily": [                                  // <=120 days, ascending; chart series
+      { "day": "2026-10-25",
+        "total": { "total": 123456, "messages": 42 },
+        "hours": [0, 0, 0, 1234, 5678, …],      // 24 integers: local-hour token totals
+        "providers": {
+          "opencode-go": { "total": 1234, "messages": 5,
+                           "hours": [0, 0, 0, 500, 734, …] }
+        } }
     ],
     "zcode": {                                  // extra-harness detail
       "dbPath": "C:\\Users\\…\\.zcode\\cli\\db\\db.sqlite",
@@ -263,6 +273,12 @@ with `[path]`.
   breakdown and top models are labeled DSH-only.
 - An unavailable/disabled statistics service answers
   `{ ok: false, error: { code: "stats-unavailable" } }`.
+- **Hourly drill-down (v1.2.0)**: `daily[].hours` and
+  `daily[].providers[id].hours` are 24-element arrays of local-hour token totals
+  (`[0..23]`, rounded integers) used by the chart mode. Every bundled harness
+  contributes when it exposes event timestamps; a day without the field is not
+  drillable and the client must not invent an all-zero hour series. DST fall-back
+  hours collapse into one local hour slot.
 
 ## Error shape
 
@@ -416,9 +432,13 @@ configure the `opencode-go` provider.
      or a balance card; Command Code also shows remaining/granted credits;
    - **token statistics**: tabs 「当前供应商 · 全部 Harness」 (default; cards = that
      provider's tokens across DSH + ZCode) / 「全部 Harness」 (all providers);
-     cards show 今日 / 最近30天 / 总计 (total tokens, input/output/cache, request
-     count); a 「按 Harness」breakdown for the active scope; DSH provider
-     breakdown and DSH top models; an unmapped-ZCode note when present;
+     cards show 今日 / 最近7天 / 最近X天(或最近30天) / 总计 (total tokens,
+     input/output/cache, request count); a 「按 Harness」breakdown for the active
+     scope; DSH provider breakdown and DSH top models; an unmapped-ZCode note when
+     present;
+   - **chart mode**: the daily bar chart, a click on a day bar drills into that
+     day's 24 local-hour bars (when the Host delivers `daily[].hours`), and the
+     明细 donuts switch between 今日 / 最近7天 / 最近X天 / 总计;
    - refresh (usage + stats), last-updated/stale line, error banners, console link.
 3. Everything client-side must work with only the shell's seeded modules
    (`react`, `react-dom`, `@deepseek-ai/dsh-client-ui-primitives`) — no build step.

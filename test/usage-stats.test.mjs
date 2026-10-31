@@ -263,11 +263,146 @@ test('createUsageStats reports today + all-time totals and per-provider rows', a
   assert.equal(lastDay.day, TODAY)
   assert.equal(lastDay.total.total, result.today.total)
   assert.equal(lastDay.providers['opencode-go'].total, result.providers[0].today.total)
+  // v1.2.0: 24 local-hour slots for the chart's hourly drill-down. Every DSH
+  // event above sits in the same local clock hour of its day.
+  const todayHour = new Date(today).getHours()
+  assert.equal(lastDay.hours.length, 24)
+  assert.equal(lastDay.hours[todayHour], result.today.total, 'the hour bar sums every provider')
+  assert.equal(lastDay.hours.filter((value) => value !== 0).length, 1, 'one populated hour slot')
+  assert.equal(lastDay.providers['opencode-go'].hours.length, 24)
+  assert.equal(lastDay.providers['opencode-go'].hours[todayHour], result.providers[0].today.total)
+  assert.equal(lastDay.providers.commandcode.hours[todayHour], 10)
+  const yesterdayEntry = result.daily.find((entry) => entry.day === dayKey(yesterday))
+  assert.ok(yesterdayEntry, 'yesterday is its own daily bar')
+  assert.equal(yesterdayEntry.hours[new Date(yesterday).getHours()], 25)
   assert.equal(result.models[0].key, 'opencode-go/deepseek-v4.1-flash')
   assert.equal(result.models[0].sinceEffective.total, result.models[0].allTime.total)
   assert.equal(result.scan.sessions, 3)
   assert.equal(typeof result.generatedAt, 'string')
   assert.match(result.day, /^\d{4}-\d{2}-\d{2}$/)
+})
+
+test('daily hours split one local day into 24 provider-aware slots', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-hours-'))
+  t.after(() => rm(dshHome, { recursive: true, force: true }))
+  const nine = todayAt(9)
+  const fifteen = todayAt(15)
+  const lateYesterday = todayAt(22) - 24 * 3600 * 1000
+  await writeSession(dshHome, 'session-hours', [
+    sessionHeader(),
+    headerEvent(1, 'opencode-go', 'm1'),
+    usageEvent(2, nine, { inputTokens: 100, outputTokens: 10, totalTokens: 110 }),
+    usageEvent(3, fifteen, { inputTokens: 200, outputTokens: 20, totalTokens: 220 }),
+    headerEvent(4, 'commandcode', 'm2'),
+    usageEvent(5, fifteen, { inputTokens: 5, outputTokens: 0, totalTokens: 5 }),
+    usageEvent(6, lateYesterday, { inputTokens: 7, outputTokens: 0, totalTokens: 7 }),
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: { stats: { ttlMs: 0, harnesses: { dsh: true, zcode: false, opencode: false, workbuddy: false, qoder: false } } },
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  assert.deepEqual(result.daily.map((entry) => entry.day), [dayKey(lateYesterday), TODAY], 'day-ascending bars')
+  const todayEntry = result.daily.find((entry) => entry.day === TODAY)
+  assert.equal(todayEntry.hours.length, 24)
+  assert.equal(todayEntry.hours[9], 110)
+  assert.equal(todayEntry.hours[15], 225, 'providers of the same hour share one slot')
+  assert.equal(todayEntry.hours.reduce((sum, value) => sum + value, 0), todayEntry.total.total)
+  assert.equal(todayEntry.providers['opencode-go'].hours.length, 24)
+  assert.equal(todayEntry.providers['opencode-go'].hours[9], 110)
+  assert.equal(todayEntry.providers['opencode-go'].hours[15], 220)
+  assert.equal(todayEntry.providers.commandcode.hours[9], 0)
+  assert.equal(todayEntry.providers.commandcode.hours[15], 5)
+  const yesterdayEntry = result.daily.find((entry) => entry.day === dayKey(lateYesterday))
+  assert.equal(yesterdayEntry.hours[new Date(lateYesterday).getHours()], 7)
+})
+
+test('daily hours merge ZCode groups with DSH usage in the same hour slot', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-home-'))
+  t.after(() => rm(dshHome, { recursive: true, force: true }))
+  const nine = todayAt(9)
+  const fourteen = todayAt(14)
+  await writeSession(dshHome, 'session-a', [
+    sessionHeader(),
+    headerEvent(1, 'opencode-go', 'm1'),
+    usageEvent(2, nine, { inputTokens: 100, outputTokens: 0, totalTokens: 100 }),
+  ])
+  const zcodePath = await writeZcodeDb(t, [
+    { providerId: 'opencode-go-chat', modelId: 'z-model-a', time: nine, input: 50, output: 0, total: 50 },
+    { providerId: 'opencode-go-chat', modelId: 'z-model-b', time: nine, input: 20, output: 0, total: 20 },
+    { providerId: 'opencode-go-chat', modelId: 'z-model-a', time: fourteen, input: 300, output: 0, total: 300 },
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: {
+      stats: {
+        ttlMs: 0,
+        harnesses: { dsh: true, zcode: true, opencode: false, workbuddy: false, qoder: false },
+        zcode: { dbPath: zcodePath, providerAliases: { 'opencode-go-chat': 'opencode-go' } },
+      },
+    },
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  const todayEntry = result.daily.find((entry) => entry.day === TODAY)
+  assert.equal(todayEntry.hours.length, 24)
+  assert.equal(todayEntry.hours[9], 170, 'DSH 100 + ZCode 70 (two models) in the same hour')
+  assert.equal(todayEntry.hours[14], 300)
+  assert.equal(todayEntry.hours.reduce((sum, value) => sum + value, 0), todayEntry.total.total)
+  assert.equal(todayEntry.providers['opencode-go'].hours[9], 170)
+  assert.equal(todayEntry.providers['opencode-go'].hours[14], 300)
+  assert.equal(todayEntry.providers['opencode-go'].total, todayEntry.total.total)
+})
+
+test('a day whose fold pruned its hour buckets stays in daily without hours', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-pruned-hours-'))
+  t.after(() => rm(dshHome, { recursive: true, force: true }))
+  const old = todayAt(9) - 60 * 24 * 3600 * 1000
+  const recent = Date.now() - 3600 * 1000
+  await writeSession(dshHome, 'session-old', [
+    sessionHeader(),
+    headerEvent(1, 'opencode-go', 'm1'),
+    usageEvent(2, old, { inputTokens: 10, outputTokens: 0, totalTokens: 10 }),
+    usageEvent(3, recent, { inputTokens: 20, outputTokens: 0, totalTokens: 20 }),
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: { stats: { ttlMs: 0, harnesses: { dsh: true, zcode: false, opencode: false, workbuddy: false, qoder: false } } },
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  const oldEntry = result.daily.find((entry) => entry.day === dayKey(old))
+  assert.ok(oldEntry, 'the old day still appears in the 120-day series')
+  assert.equal(oldEntry.total.total, 10)
+  assert.equal('hours' in oldEntry, false, 'a day without hour data must not expose an all-zero series')
+  const recentEntry = result.daily.find((entry) => entry.day === dayKey(recent))
+  assert.ok(Array.isArray(recentEntry.hours))
+  assert.equal(recentEntry.hours[new Date(recent).getHours()], 20)
+})
+
+test('hourly bars are rounded integers while day totals stay exact', async (t) => {
+  const dshHome = await mkdtemp(join(tmpdir(), 'tokenlens-hour-rounding-'))
+  t.after(() => rm(dshHome, { recursive: true, force: true }))
+  const nine = todayAt(9)
+  await writeSession(dshHome, 'session-frac', [
+    sessionHeader(),
+    headerEvent(1, 'opencode-go', 'm1'),
+    // No totalTokens: the fold sums the parts (10.5 + 0.25 = 10.75).
+    usageEvent(2, nine, { inputTokens: 10.5, outputTokens: 0.25 }),
+  ])
+  const stats = createUsageStats({
+    dshHome,
+    config: { stats: { ttlMs: 0, harnesses: { dsh: true, zcode: false, opencode: false, workbuddy: false, qoder: false } } },
+    log: { info() {}, warn() {} },
+  })
+  const result = await stats.get()
+  const todayEntry = result.daily[result.daily.length - 1]
+  const hour = new Date(nine).getHours()
+  assert.equal(todayEntry.total.total, 10.75, 'the day bucket keeps the exact token sum')
+  assert.equal(todayEntry.hours[hour], 11, 'the hourly bar is rounded to an integer')
+  assert.equal(todayEntry.providers['opencode-go'].hours[hour], 11)
+  assert.ok(todayEntry.hours.every((value) => Number.isInteger(value)))
 })
 
 test('the cache rescans only changed files and honours the TTL', async (t) => {

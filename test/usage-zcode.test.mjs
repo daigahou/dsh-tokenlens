@@ -93,7 +93,7 @@ test('defaultZcodeDbPath honours the env override and the home fallback', () => 
   assert.equal(defaultZcodeDbPath({}, 'C:\\u'), join('C:\\u', '.zcode', 'cli', 'db', 'db.sqlite'))
 })
 
-test('readZcodeUsage normalizes ZCode semantics per day/provider/model group', async (t) => {
+test('readZcodeUsage normalizes ZCode semantics per (day, hour, provider, model) group', async (t) => {
   const path = await zcodeDatabase(t, [
     // 470,134 prompt of which 469,760 cached: non-cached input must be 374.
     { providerId: 'opencode-go-chat', modelId: 'deepseek-v4.1-flash', completedAt: at(TODAY, 10), input: 470134, output: 267, cacheRead: 469760, total: 470401, sessionId: 's1' },
@@ -104,17 +104,27 @@ test('readZcodeUsage normalizes ZCode semantics per day/provider/model group', a
   ])
   const result = readZcodeUsage({ dbPath: path })
   assert.equal(result.harness, 'zcode')
-  assert.equal(result.rows, 2, 'one group per (day, provider, model); zero-total rows filtered by SQL')
-  const todayGroup = result.groups.find((group) => group.day === TODAY && group.providerId === 'opencode-go-chat')
-  assert.deepEqual(todayGroup.bucket, {
-    input: 374 + 600,
-    output: 267 + 100,
-    cacheRead: 469760 + 400,
+  assert.equal(result.rows, 3, 'one group per (day, hour, provider, model); zero-total rows filtered by SQL')
+  assert.deepEqual(result.groups.map((group) => [group.day, group.hour, group.providerId]), [
+    [YESTERDAY, 9, 'account:bigmodel-start-plan'],
+    [TODAY, 10, 'opencode-go-chat'],
+    [TODAY, 11, 'opencode-go-chat'],
+  ])
+  // The same day/provider/model in two local hours stays two groups, and the
+  // zero-token hour 12 row leaves no group behind.
+  const todayGroups = result.groups.filter((group) => group.day === TODAY)
+  assert.deepEqual(todayGroups.map((group) => group.hour), [10, 11])
+  assert.deepEqual(todayGroups[0].bucket, {
+    input: 374,
+    output: 267,
+    cacheRead: 469760,
     cacheWrite: 0,
-    total: 470401 + 1100,
-    messages: 2,
+    total: 470401,
+    messages: 1,
   })
+  assert.deepEqual(todayGroups[1].bucket, { input: 600, output: 100, cacheRead: 400, cacheWrite: 0, total: 1100, messages: 1 })
   const yesterdayGroup = result.groups.find((group) => group.day === YESTERDAY)
+  assert.equal(yesterdayGroup.hour, 9)
   assert.equal(yesterdayGroup.providerId, 'account:bigmodel-start-plan')
   assert.equal(yesterdayGroup.modelId, 'GLM-5.3')
   assert.deepEqual(yesterdayGroup.bucket, { input: 500, output: 200, cacheRead: 1500, cacheWrite: 0, total: 2200, messages: 1 })
